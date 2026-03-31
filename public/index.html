@@ -1025,7 +1025,7 @@ async function fetchImagesBackground() {
    API — NARRATE (serverless proxy)
 ═══════════════════════════════════════════ */
 async function callNarrate(payload) {
-  const resp = await fetch('/api/narrate', {
+  const resp = await fetch('https://torneo-convergencia.vercel.app/api/narrate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
