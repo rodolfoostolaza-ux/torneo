@@ -3,3 +3,8 @@
 node_modules/
 .env
 .env.local
+
+.vercel
+
+# versión legacy (usar public/index.html)
+/index.html
