@@ -24,6 +24,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: 'Crimson Pro', Georgia, serif;
+  font-size: 1.08rem;
   min-height: 100vh;
   overflow-x: hidden;
 }
@@ -581,6 +582,7 @@ body {
   <button class="nav-btn nav-btn-red" onclick="confirmRestart()">← Inicio</button>
   <div id="nav-status">CONVERGENCIA</div>
   <button class="nav-btn nav-btn-gold" onclick="showBracketModal()" id="nav-bracket-btn" style="display:none">Ver Bracket</button>
+  <button class="nav-btn nav-btn-gold" onclick="AudioManager.toggle()" id="btn-mute" style="display:none;min-width:2.2rem">🔊</button>
 </div>
 
 <!-- ════ BRACKET MODAL ════ -->
@@ -768,6 +770,92 @@ let curLoser    = null;
 let curDeath    = '';
 let curDamage   = '';
 let champion    = null;
+
+/* ═══════════════════════════════════════════
+   AUDIO MANAGER
+═══════════════════════════════════════════ */
+const AudioManager = {
+  ambient: null,
+  battle:  null,
+  current: null,
+  muted:   false,
+  FADE:    1500,
+
+  init() {
+    this.ambient = new Audio('audio/ambient.mp3');
+    this.ambient.loop = true;
+    this.ambient.volume = 0;
+
+    this.battle = new Audio('audio/battle.mp3');
+    this.battle.loop = true;
+    this.battle.volume = 0;
+  },
+
+  _fadeIn(audio, duration) {
+    audio.play().catch(() => {});
+    const steps = 30;
+    const dt    = duration / steps;
+    const dv    = 0.7 / steps;   // max volume 0.7
+    let step = 0;
+    const iv = setInterval(() => {
+      step++;
+      audio.volume = Math.min(0.7, audio.volume + dv);
+      if (step >= steps) clearInterval(iv);
+    }, dt);
+  },
+
+  _fadeOut(audio, duration, cb) {
+    const steps = 30;
+    const dt    = duration / steps;
+    const dv    = audio.volume / steps;
+    let step = 0;
+    const iv = setInterval(() => {
+      step++;
+      audio.volume = Math.max(0, audio.volume - dv);
+      if (step >= steps) {
+        clearInterval(iv);
+        audio.pause();
+        audio.currentTime = 0;
+        if (cb) cb();
+      }
+    }, dt);
+  },
+
+  play(track) {
+    const audio = this[track];
+    if (!audio || this.muted) return;
+    this.current = audio;
+    this._fadeIn(audio, this.FADE);
+    document.getElementById('btn-mute').style.display = '';
+  },
+
+  crossfade(track) {
+    const next = this[track];
+    if (!next || this.muted) return;
+    if (this.current && this.current !== next) {
+      const prev = this.current;
+      this._fadeOut(prev, this.FADE, () => {
+        this.current = next;
+        this._fadeIn(next, this.FADE);
+      });
+    } else {
+      this.current = next;
+      this._fadeIn(next, this.FADE);
+    }
+  },
+
+  toggle() {
+    this.muted = !this.muted;
+    const btn = document.getElementById('btn-mute');
+    if (this.muted) {
+      if (this.current) this.current.pause();
+      btn.textContent = '🔇';
+    } else {
+      if (this.current) { this.current.volume = 0; this._fadeIn(this.current, 800); }
+      btn.textContent = '🔊';
+    }
+  }
+};
 
 /* ═══════════════════════════════════════════
    NAVIGATION
@@ -1177,6 +1265,8 @@ function startApp() {
   const btn = document.getElementById('btn-start');
   btn.disabled = true;
   btn.textContent = 'Cargando...';
+  AudioManager.init();
+  AudioManager.play('ambient');
   loadAllChars();
 }
 
@@ -1571,6 +1661,7 @@ function launchFinal() {
   champion = curWinner;
   showScreen('screen-final');
   setNavStatus('⚡ Prueba Final — Uatu el Observador');
+  AudioManager.crossfade('battle');
 
   const mv  = isMarvel(champion);
   const col = charColor(champion);
