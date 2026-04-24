@@ -1,0 +1,7 @@
+{
+  "name": "torneo",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "CONVERGENCIA: El Torneo Final - Marvel vs DC fighting tournament",
+  "private": true
+}
