@@ -1113,16 +1113,16 @@ async function fetchImagesBackground() {
    API — NARRATE (serverless proxy)
 ═══════════════════════════════════════════ */
 async function callNarrate(payload) {
-  const resp = await fetch('https://torneo-pearl.vercel.app/api/narrate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  const data = await resp.json();
-  if (data.error) throw new Error(data.error);
-  return data;
-}
+   const resp = await fetch('https://torneo-convergencia.vercel.app/api/narrate', {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/json' },
+     body: JSON.stringify(payload)
+   });
+   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+   const data = await resp.json();
+   if (data.error) throw new Error(data.error);
+   return data;
+ }
 
 async function testOpenRouter() {
    const btn = document.getElementById('btn-gemini-test');
