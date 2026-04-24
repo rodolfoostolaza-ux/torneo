@@ -1124,30 +1124,30 @@ async function callNarrate(payload) {
   return data;
 }
 
-async function testGemini() {
-  const btn = document.getElementById('btn-gemini-test');
-  const res = document.getElementById('gemini-test-result');
-  btn.disabled = true;
-  res.style.color = 'var(--gold)';
-  res.textContent = '⏳ Probando conexión con Gemini...';
-  try {
-    const t0   = Date.now();
-    const data = await callNarrate({
-      fighter1: { name: 'Spider-Man', publisher: 'Marvel Comics', stats: { intelligence:90,strength:55,speed:67,durability:75,power:74,combat:64 }, damage: '' },
-      fighter2: { name: 'Batman',     publisher: 'DC Comics',     stats: { intelligence:100,strength:26,speed:27,durability:50,power:47,combat:100 }, damage: '' },
-      round: 'Test'
-    });
-    const ms = Date.now() - t0;
-    res.style.color = '#27ae60';
-    res.textContent = `✓ Gemini OK — ${ms}ms — ganador: "${(data.winnerName || '?').slice(0,40)}"`;
-    console.log('[Gemini Test] OK en', ms, 'ms. Datos:', data);
-  } catch(e) {
-    res.style.color = '#e74c3c';
-    res.textContent = `✗ Gemini error: ${e.message}`;
-    console.error('[Gemini Test] Error:', e);
-  }
-  btn.disabled = false;
-}
+async function testOpenRouter() {
+   const btn = document.getElementById('btn-gemini-test');
+   const res = document.getElementById('gemini-test-result');
+   btn.disabled = true;
+   res.style.color = 'var(--gold)';
+   res.textContent = '⏳ Probando conexión con OpenRouter...';
+   try {
+     const t0   = Date.now();
+     const data = await callNarrate({
+       fighter1: { name: 'Spider-Man', publisher: 'Marvel Comics', stats: { intelligence:90,strength:55,speed:67,durability:75,power:74,combat:64 }, damage: '' },
+       fighter2: { name: 'Batman',     publisher: 'DC Comics',     stats: { intelligence:100,strength:26,speed:27,durability:50,power:47,combat:100 }, damage: '' },
+       round: 'Test'
+     });
+     const ms = Date.now() - t0;
+     res.style.color = '#27ae60';
+     res.textContent = `✓ OpenRouter OK — ${ms}ms — ganador: "${(data.winnerName || '?').slice(0,40)}"`;
+     console.log('[OpenRouter Test] OK en', ms, 'ms. Datos:', data);
+   } catch(e) {
+     res.style.color = '#e74c3c';
+     res.textContent = `✗ OpenRouter error: ${e.message}`;
+     console.error('[OpenRouter Test] Error:', e);
+   }
+   btn.disabled = false;
+ }
 
 async function testImagen() {
   const btn = document.getElementById('btn-img-test');

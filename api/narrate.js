@@ -14,9 +14,9 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing fighter data' });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
+    return res.status(500).json({ error: 'OPENROUTER_API_KEY not configured' });
   }
 
   const ss = f =>
@@ -53,28 +53,35 @@ export default async function handler(req, res) {
       `GANADOR: [nombre exacto de arriba] | MUERTE: [cómo murió el perdedor, 2 oraciones brutales] | DAÑO: [daño físico visible que quedó en el ganador, 1 oración]`;
   }
 
-  const geminiUrl =
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const openrouterUrl =
+    `https://openrouter.ai/api/v1/chat/completions`;
 
   try {
-    const r = await fetch(geminiUrl, {
+    const r = await fetch(openrouterUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': '', // optional
+        'X-OpenRouter-Title': '', // optional
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.95, maxOutputTokens: 4000 }
+        model: 'google/gemini-2.0-flash-001',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.95,
+        max_tokens: 4000
       })
     });
 
     const d = await r.json();
 
     if (!r.ok || d.error) {
-      return res.status(502).json({ error: d.error?.message || `Gemini HTTP ${r.status}` });
+      return res.status(502).json({ error: d.error?.message || `OpenRouter HTTP ${r.status}` });
     }
 
-    const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const text = d.choices?.[0]?.message?.content || '';
     if (!text) {
-      return res.status(502).json({ error: 'Empty response from Gemini' });
+      return res.status(502).json({ error: 'Empty response from OpenRouter' });
     }
 
     const ganadorM    = text.match(/GANADOR:\s*([^\|\n]+)/i);
