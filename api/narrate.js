@@ -14,9 +14,9 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing fighter data' });
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env.CEREBRAS_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'OPENROUTER_API_KEY not configured' });
+    return res.status(500).json({ error: 'CEREBRAS_API_KEY not configured' });
   }
 
   const ss = f =>
@@ -53,35 +53,40 @@ export default async function handler(req, res) {
       `GANADOR: [nombre exacto de arriba] | MUERTE: [cómo murió el perdedor, 2 oraciones brutales] | DAÑO: [daño físico visible que quedó en el ganador, 1 oración]`;
   }
 
-  const openrouterUrl =
-    `https://openrouter.ai/api/v1/chat/completions`;
+  const cerebrasUrl =
+    `https://api.cerebras.ai/v1/chat/completions`;
 
   try {
-    const r = await fetch(openrouterUrl, {
+    const r = await fetch(cerebrasUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': '', // optional
-        'X-OpenRouter-Title': '', // optional
+        // Cerebras está detrás de Cloudflare y bloquea User-Agents "de bot"
+        // con HTTP 403 (error code 1010). Un UA de browser lo evita.
+        'User-Agent': 'Mozilla/5.0',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-001',
+        model: 'gpt-oss-120b',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.95,
-        max_tokens: 4000
+        max_completion_tokens: 4000,
+        // gpt-oss-120b es modelo de razonamiento; "low" minimiza el costo del
+        // razonamiento (no hace falta para narrar) y deja la respuesta final
+        // limpia en message.content (el razonamiento va aparte en .reasoning).
+        reasoning_effort: 'low'
       })
     });
 
     const d = await r.json();
 
     if (!r.ok || d.error) {
-      return res.status(502).json({ error: d.error?.message || `OpenRouter HTTP ${r.status}` });
+      return res.status(502).json({ error: d.error?.message || `Cerebras HTTP ${r.status}` });
     }
 
     const text = d.choices?.[0]?.message?.content || '';
     if (!text) {
-      return res.status(502).json({ error: 'Empty response from OpenRouter' });
+      return res.status(502).json({ error: 'Empty response from Cerebras' });
     }
 
     const ganadorM    = text.match(/GANADOR:\s*([^\|\n]+)/i);
