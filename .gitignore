@@ -4,7 +4,7 @@ node_modules/
 .env
 .env.local
 
-.vercel
-
-# versión legacy (usar public/index.html)
-/index.html
+# Artefactos de tooling local — no son del proyecto
+.openclaude-profile.json
+.playwright-mcp/
+snapshot_full.md
