@@ -1,11 +1,28 @@
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Allowlist de orígenes (configurable por env var ALLOWED_ORIGINS, separados
+  // por coma; default = dominio de producción). Candado básico: frena el abuso
+  // casual del endpoint (otros sitios embebiéndolo, scripts sin Origin). NO
+  // detiene a quien falsifique el header Origin — para eso haría falta rate-limit.
+  // Normaliza quitando barra(s) final(es): el header Origin nunca trae barra,
+  // pero la env var podría configurarse con ella y romper el match (403 falso).
+  const stripSlash = s => s.replace(/\/+$/, '');
+  const allowed = (process.env.ALLOWED_ORIGINS || 'https://torneo-convergencia.vercel.app')
+    .split(',').map(s => stripSlash(s.trim())).filter(Boolean);
+  const origin = stripSlash(req.headers.origin || '');
+  const isAllowed = allowed.includes(origin);
+
+  res.setHeader('Access-Control-Allow-Origin', isAllowed ? origin : allowed[0]);
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Vary', 'Origin');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  if (!isAllowed) {
+    return res.status(403).json({ error: 'Origin not allowed' });
   }
 
   const { fighter1, fighter2, round, isUatuFight } = req.body;
@@ -56,9 +73,16 @@ export default async function handler(req, res) {
   const cerebrasUrl =
     `https://api.cerebras.ai/v1/chat/completions`;
 
+  // Timeout duro: si Cerebras no responde en 15s, abortamos en vez de dejar
+  // colgada la función serverless (Vercel la mataría a los 300s y el usuario
+  // se quedaría esperando). El frontend tiene su fallbackNarr para este caso.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
   try {
     const r = await fetch(cerebrasUrl, {
       method: 'POST',
+      signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
@@ -100,6 +124,11 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ narration, winnerName, loserFate, winnerDamage, epilogue: narration });
   } catch (e) {
+    if (e.name === 'AbortError') {
+      return res.status(504).json({ error: 'Cerebras tardó demasiado (timeout 15s)' });
+    }
     return res.status(500).json({ error: e.message });
+  } finally {
+    clearTimeout(timeout);
   }
 }
