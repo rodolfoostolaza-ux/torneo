@@ -47,12 +47,13 @@ Cierre (4 hallazgos del review, ninguno alto) — HECHO:
 - [x] `showDialogue()` dentro del try/finally.
 - [x] No re-mostrar el widget de apuesta en un reintento de combate.
 
-### Lote 2 — Marco épico (100% código, CERO costo) — *lo que más extrañabas*
-- [ ] Pantalla de **intro**: monta la Convergencia (dos universos colisionan, el torneo, Uatu árbitro).
-- [ ] Pantalla de **outro** con el ganador del torneo (sprite + récord de apuestas).
-- [ ] **Game over épico** (cuando tu campeón cae ante Uatu — el final variable ya existe en lógica).
-- [ ] **Créditos arcade** al vencer a Uatu (scroll de cartucho) → **duplican tus $UATU**.
-- [ ] **Pantalla atract-mode de stats** (la explicación mínima — D1).
+### Lote 2 — Marco épico (100% código, CERO costo) — HECHO (review 1 alta corregida)
+- [x] Pantalla de **intro**: monta la Convergencia (lore en la caja RPG, reusa `DialogueBox`).
+- [x] Pantalla de **outro** del campeón (sprite + récord + saldo) — `renderChampion`.
+- [x] **Game over épico** (sprite roto + humor negro + grisáceo) — `renderGameOver`.
+- [x] **Créditos arcade** al vencer a Uatu (scroll de cartucho) → **duplican tus $UATU** (con guard de idempotencia).
+- [x] **Pantalla atract-mode de stats** (ficha de ejemplo anotada + ciclo de arquetipos — D1).
+- Cierre del review: doble-click en replay blindado (`{ once: true }`). Verificado por captura las 4 pantallas.
 
 ### Lote 3 — Piel en el juego (código, sin assets nuevos)
 - [ ] **Selección de campeón** (D2) + seguir apostando en todas las peleas.

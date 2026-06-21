@@ -1,7 +1,7 @@
 // js/main.js — punto de entrada. Pide alias, crea el torneo y corre el loop de
 // combates hasta el cierre contra Uatu.
 import { DialogueBox } from './dialogue.js';
-import { renderAlias, renderClose, renderFatal } from './render.js';
+import { renderAlias, renderEnding, renderFatal, renderIntro, renderStatsAttract } from './render.js';
 import { createTournament, isDone } from './state.js';
 import { playMatch, resetNarrateThrottle } from './engine-client.js';
 
@@ -35,10 +35,12 @@ async function runTournament(alias) {
       await new Promise(res => setTimeout(res, 1500 * fails));   // backoff creciente
     }
   }
-  renderClose(state, () => runTournament(alias));
+  await renderEnding(state, () => runTournament(alias));
 }
 
 async function main() {
+  await renderIntro();             // monta la Convergencia (solo en arranque fresco)
+  await renderStatsAttract();      // atract-mode: cómo se lee una ficha (saltable)
   const alias = await renderAlias();
   await runTournament(alias);
 }

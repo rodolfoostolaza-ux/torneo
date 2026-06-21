@@ -1,6 +1,7 @@
 // js/render.js — capa de presentación (pinta el DOM a partir del estado).
 // No decide nada del juego: solo dibuja matchup, apuesta, bracket y cierre.
-import { ARCHETYPES } from './config.js';
+import { ARCHETYPES, BEATS, ROSTER } from './config.js';
+import { DialogueBox } from './dialogue.js';
 
 const el = id => document.getElementById(id);
 const pct = p => `${Math.round(p * 100)}%`;
@@ -23,6 +24,75 @@ const STAT_LABELS = {
   intelligence: 'INT', strength: 'FUE', speed: 'VEL',
   durability: 'RES', power: 'POD', combat: 'COM',
 };
+
+// ── Intro / montaje de la Convergencia (Lote 2) ────────────────────
+// Title screen + lore en la misma caja RPG del combate (typewriter). Solo sale
+// en el arranque fresco; "jugar de nuevo" no la repite (no molesta en replays).
+const INTRO_LINES = [
+  'Dos universos jamás debieron tocarse: Marvel y DC.',
+  'UATU, el Observador, rompió su juramento por una pregunta: ¿quién gana si chocan?',
+  'Ocho de Marvel. Ocho de DC. Dieciséis campeones cruzan el puente entre mundos.',
+  'Tú no peleas — lees el combate y APUESTAS. Cada $UATU es tu palabra.',
+  'Sobrevive al bracket. Al final del puente, el Observador baja a la arena.',
+];
+
+export async function renderIntro() {
+  el('hud').innerHTML = '';
+  el('screen').innerHTML = `
+    <div class="screen center intro">
+      <div class="intro-emblem">⊙</div>
+      <div class="title intro-title">CONVERGENCIA</div>
+      <div class="subtitle intro-sub"><span class="marvel-ink">MARVEL</span> vs <span class="dc-ink">DC</span></div>
+      <div class="subtitle">— la prueba de Uatu —</div>
+    </div>`;
+  const box = new DialogueBox(el('dialogue'), { speed: 30, autoMs: 6500 });
+  showDialogue();
+  await box.show(INTRO_LINES);
+  hideDialogue();
+}
+
+// ── Atract-mode de stats (D1: explicación mínima, ambiental, saltable) ──
+// Como las pantallas que ciclaban en el NES sin apretar Start. NO es tutorial:
+// muestra una ficha real anotada + el triángulo de arquetipos y avanza sola.
+const STAT_GLOSS = {
+  intelligence: 'planeación, tecnología, trampas',
+  strength: 'daño físico bruto',
+  speed: 'quién golpea primero',
+  durability: 'cuánto castigo aguanta',
+  power: 'energía y poderes especiales',
+  combat: 'técnica y experiencia de pelea',
+};
+
+export function renderStatsAttract() {
+  return new Promise(resolve => {
+    el('hud').innerHTML = '';
+    const ej = ROSTER.marvel.find(f => f.id === 'spiderman') || ROSTER.marvel[0];
+    const glossRows = Object.keys(STAT_LABELS).map(k =>
+      `<div class="gloss"><span class="gk">${STAT_LABELS[k]}</span><span class="gv">${STAT_GLOSS[k]}</span></div>`).join('');
+    const cycle = [];
+    let a = 'mistico';
+    for (let i = 0; i < 5; i++) { cycle.push(arch(a).label); a = BEATS[a]; }
+    el('screen').innerHTML = `
+      <div class="screen center stats-attract">
+        <div class="subtitle accent-text">CÓMO SE LEE UNA FICHA</div>
+        <div class="row">
+          ${fighterCard(ej)}
+          <div class="panel gloss-panel">
+            <div class="subtitle">Seis stats (0–100):</div>
+            ${glossRows}
+          </div>
+        </div>
+        <div class="panel">
+          <div class="subtitle">Ventaja de arquetipo — cada uno vence al siguiente:</div>
+          <div class="cycle">${cycle.join(' ▶ ')} ▶ …</div>
+        </div>
+        <button id="attract-start" class="btn accent full">START ▶</button>
+      </div>`;
+    const go = () => { clearTimeout(t); resolve(); };
+    const t = setTimeout(go, 12000);     // ambiental: si nadie toca, avanza sola
+    el('attract-start').addEventListener('click', go);
+  });
+}
 
 // ── Pantalla de alias ──────────────────────────────────────────────
 export function renderAlias() {
@@ -211,23 +281,98 @@ export function renderFatal(message) {
   el('reload').addEventListener('click', () => location.reload());
 }
 
-// ── Cierre ─────────────────────────────────────────────────────────
-export function renderClose(state, onReplay) {
+// ── Cierre épico (Lote 2) ──────────────────────────────────────────
+// Bifurca el final según el veredicto del motor (el cliente NO decide: lee
+// history.at(-1) con phase 'done'). Victoria → créditos arcade que duplican
+// $UATU → pantalla de campeón. Derrota → game over con humor negro.
+export async function renderEnding(state, onReplay) {
   el('hud').innerHTML = '';
+  hideDialogue();
   const champ = state.fighters[state.champion];
   const won = state.history.filter(h => h.bet && h.bet.won).length;
   const total = state.history.filter(h => h.bet).length;
-  const beatUatu = state.history.at(-1)?.winnerId === state.champion;
+  // Ancla a phase 'done' (settle ya corrió la pelea de Uatu): blinda el at(-1).
+  const beatUatu = state.phase === 'done' && state.history.at(-1)?.winnerId === state.champion;
+
+  if (beatUatu) {
+    await rollCredits(state, champ);
+    // BONUS por vencer a Uatu (recompensa meta, no combate). Guard de idempotencia:
+    // aunque hoy renderEnding corre una sola vez por partida, blinda contra duplicar
+    // el saldo si alguna vez se reentra sobre el mismo state.
+    if (!state._bonusApplied) { state._bonusApplied = true; state.coins *= 2; }
+    renderChampion(state, champ, won, total, onReplay);
+  } else {
+    renderGameOver(state, champ, won, total, onReplay);
+  }
+}
+
+// Retrato grande centrado reutilizando portrait-wrap (su onerror oculta el marco
+// si falta el sprite). broken = retrato roto (para la derrota).
+function endingPortrait(fighter, broken) {
+  if (!fighter) return '';
+  const src = spriteSrc(fighter.id, broken);
+  return `<div class="ending-portrait"><div class="portrait-wrap">
+      <img class="portrait" src="${src}" alt="${esc(fighter.name)}" onerror="${ONERR}"></div></div>`;
+}
+
+// Créditos arcade: scroll de cartucho con humor seco. Dura ~9s o lo saltas.
+function rollCredits(state, champ) {
+  return new Promise(resolve => {
+    el('screen').innerHTML = `
+      <div class="screen center">
+        <div class="credits-viewport">
+          <div class="credits-roll">
+            <div class="title">CONVERGENCIA</div>
+            <div class="subtitle">un torneo improvisado por</div>
+            <div class="credits-name">UATU EL OBSERVADOR</div>
+            <div class="credits-gap"></div>
+            <div class="credits-line"><span>CAMPEÓN</span><b>${esc(champ ? champ.name : '—')}</b></div>
+            <div class="credits-line"><span>APOSTADOR</span><b>${esc(state.alias)}</b></div>
+            <div class="credits-line"><span>MULTIVERSO</span><b>intacto, por hoy</b></div>
+            <div class="credits-line"><span>ÁRBITRO</span><b>rompió su juramento</b></div>
+            <div class="credits-gap"></div>
+            <div class="subtitle">hiciste parpadear al Observador.</div>
+            <div class="title accent-text">GRACIAS POR JUGAR</div>
+          </div>
+        </div>
+        <button id="credits-skip" class="btn full">▶ CONTINUAR</button>
+      </div>`;
+    const done = () => { clearTimeout(t); resolve(); };
+    const t = setTimeout(done, 9000);
+    el('credits-skip').addEventListener('click', done);
+  });
+}
+
+function renderChampion(state, champ, won, total, onReplay) {
   el('screen').innerHTML = `
     <div class="screen center">
-      <div class="title">FIN DEL TORNEO</div>
+      <div class="title">⊙ CAMPEÓN ⊙</div>
+      ${endingPortrait(champ, false)}
+      <div class="close-champ">🏆 ${esc(champ ? champ.name : '—')}</div>
       <div class="panel">
-        <div class="close-champ">🏆 ${champ ? champ.name : '—'}</div>
-        <div class="subtitle">${beatUatu ? 'Superó la prueba de Uatu' : 'Cayó ante Uatu, y el multiverso con él'}</div>
+        <div class="subtitle">El Observador parpadeó. El multiverso resiste un día más.</div>
+        <div class="record">Aciertos: ${won}/${total}</div>
+        <div class="record coins">BONUS UATU ×2 → Saldo: $UATU ${state.coins}</div>
+      </div>
+      <button id="replay" class="btn accent full">JUGAR DE NUEVO</button>
+    </div>`;
+  // once: evita que un doble-click arranque dos torneos en paralelo pisándose el DOM.
+  el('replay').addEventListener('click', () => onReplay && onReplay(), { once: true });
+}
+
+function renderGameOver(state, champ, won, total, onReplay) {
+  el('screen').innerHTML = `
+    <div class="screen center gameover">
+      <div class="title lose-text">GAME OVER</div>
+      ${endingPortrait(champ, true)}
+      <div class="panel">
+        <div class="subtitle">${esc(champ ? champ.name : 'Tu campeón')} cayó ante Uatu. El Observador ni se inmuta.</div>
+        <div class="subtitle dim">Otro multiverso a la basura.</div>
         <div class="record">Aciertos: ${won}/${total}</div>
         <div class="record coins">Saldo final: $UATU ${state.coins}</div>
       </div>
       <button id="replay" class="btn accent full">JUGAR DE NUEVO</button>
     </div>`;
-  el('replay').addEventListener('click', () => onReplay && onReplay());
+  // once: evita que un doble-click arranque dos torneos en paralelo pisándose el DOM.
+  el('replay').addEventListener('click', () => onReplay && onReplay(), { once: true });
 }
