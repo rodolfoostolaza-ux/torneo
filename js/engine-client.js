@@ -12,6 +12,9 @@ function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
 // así la narración viene de la IA y no del fallback genérico.
 const NARRATE_GAP_MS = 2100;
 let lastNarrateAt = 0;
+// Reinicia el throttle al arrancar una partida nueva: sin esto, el lastNarrateAt de
+// la partida anterior puede forzar una espera fantasma de hasta ~2s en la 1ª narración.
+export function resetNarrateThrottle() { lastNarrateAt = 0; }
 
 // POST con reintento corto: un fallo transitorio de /api/resolve (red, cold start,
 // 5xx) NO debe congelar el torneo, y un 429/5xx de /api/narrate merece otra
@@ -116,9 +119,13 @@ export async function playMatch(state, dialogue) {
     { fighter1, fighter2, torneoSeed: state.torneoSeed, matchId, reveal: false });
   renderMatchup(fighter1, fighter2, odds, isUatuFight);
 
-  // 2) apuesta obligatoria
-  const bet = await renderBetControls(fighter1, fighter2, state.coins);
-  placeBet(state, bet.fighterId, bet.amount);
+  // 2) apuesta obligatoria. Si reintentamos un combate donde ya apostaste, no
+  // vuelvas a pedir la apuesta (evita el doble widget en un reintento de combate).
+  const existingBet = state.bets[matchId];
+  if (!existingBet || existingBet.settled) {
+    const bet = await renderBetControls(fighter1, fighter2, state.coins);
+    placeBet(state, bet.fighterId, bet.amount);
+  }
 
   // 3) resolver (el motor decide)
   const result = await api('/api/resolve',
@@ -146,8 +153,8 @@ export async function playMatch(state, dialogue) {
   const lines = (narr.lines && narr.lines.length)
     ? narr.lines : fallbackNarration(result, fighter1, fighter2, isUatuFight).lines;
   const tail = [narr.loserFate, narr.winnerScar].filter(Boolean);
-  showDialogue();
   try {
+    showDialogue();
     await dialogue.show([...lines, ...tail]);
   } finally {
     hideDialogue();   // pase lo que pase, no dejar el diálogo ni su listener colgado

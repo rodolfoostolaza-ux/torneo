@@ -196,6 +196,21 @@ export function renderBracket(state) {
 export function showDialogue() { el('dialogue').classList.remove('hidden'); }
 export function hideDialogue() { el('dialogue').classList.add('hidden'); el('dialogue').innerHTML = ''; }
 
+// ── Error fatal ────────────────────────────────────────────────────
+// Salida visible cuando el torneo agota los reintentos (servidor caído):
+// en vez de congelarse mudo, avisa y ofrece recargar.
+export function renderFatal(message) {
+  hideDialogue();
+  el('hud').innerHTML = '';
+  el('screen').innerHTML = `
+    <div class="screen center">
+      <div class="title">UPS</div>
+      <div class="panel"><div class="subtitle">${esc(message)}</div></div>
+      <button id="reload" class="btn accent full">REINTENTAR</button>
+    </div>`;
+  el('reload').addEventListener('click', () => location.reload());
+}
+
 // ── Cierre ─────────────────────────────────────────────────────────
 export function renderClose(state, onReplay) {
   el('hud').innerHTML = '';

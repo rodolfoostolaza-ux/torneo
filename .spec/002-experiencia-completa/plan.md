@@ -24,8 +24,9 @@ Avanzo con el default y lo marco; dime si lo cambias. (D1 ya resuelta, ver §1.)
 
 - **D2 — Mecánica del campeón.** Default: eliges **1 campeón** de los 16; sigues apostando en TODAS
   las peleas; bono $UATU si tu campeón llega lejos/gana. (Reversible, lo afino al construir Lote 3.)
-- **D3 — Modos de juego.** Default: arrancar con **2** — "Campeonato" (el actual, narrado) y
-  "Resolver rápido" (sin narración; **hoy NO existe**, es a construir). Más modos → backlog.
+
+> "Resolver rápido" y los **modos de juego** quedan FUERA de v2.1 (Rodolfo: "esta versión no lo
+> permite, quítalo"). El único modo es el Campeonato actual. Modos → backlog, no alcance activo.
 
 ## 3. Principios que el plan respeta (constitution.md)
 - **#1 El jugador decide, no mira** → selección de campeón + apuestas en todas lo refuerzan.
@@ -40,11 +41,11 @@ Avanzo con el default y lo marco; dime si lo cambias. (D1 ya resuelta, ver §1.)
 
 ### Lote 1 — Bugs + narración (HECHO, falta cierre)
 Ya intervenido: spoiler del ganador, freeze R3C2, fallback visible, narración épica-densa, throttle Cerebras.
-Cierre (4 hallazgos del review, ninguno alto):
-- [ ] Tope de reintentos por combate + backoff (no martillar si `/api/resolve` se cae de verdad).
-- [ ] Reset del throttle al iniciar partida (evitar espera fantasma en replay).
-- [ ] `showDialogue()` dentro del try/finally.
-- [ ] (menor) No re-mostrar el widget de apuesta en un reintento de combate.
+Cierre (4 hallazgos del review, ninguno alto) — HECHO:
+- [x] Tope de reintentos por combate (MAX_FAILS=5) + backoff creciente + `renderFatal` (no martilla infinito).
+- [x] Reset del throttle (`resetNarrateThrottle`) al iniciar partida.
+- [x] `showDialogue()` dentro del try/finally.
+- [x] No re-mostrar el widget de apuesta en un reintento de combate.
 
 ### Lote 2 — Marco épico (100% código, CERO costo) — *lo que más extrañabas*
 - [ ] Pantalla de **intro**: monta la Convergencia (dos universos colisionan, el torneo, Uatu árbitro).
@@ -60,8 +61,7 @@ Cierre (4 hallazgos del review, ninguno alto):
 - [ ] **Diálogos pre Y post combate** como momento propio. Hoy solo hay 2 frases de cierre pegadas a
   la narración (`loserFate`/`winnerScar`); faltan los diálogos de verdad, antes y después.
 
-### Lote 4 — Modos + maquinaria de ocultos (código)
-- [ ] **Modos** (D3): Campeonato + Resolver rápido (este último no existe hoy).
+### Lote 4 — Maquinaria de ocultos (código)
 - [ ] **Slot estilo SMB3** (el minijuego opt-in de §5): carriles, timing, premio escalonado.
 - [ ] **Persistencia** de desbloqueos (localStorage) + lógica del EV (§5). Probable con placeholders antes de Lote 5.
 
@@ -91,5 +91,5 @@ El gancho de longevidad. Transversal: la maquinaria es Lote 4, los sprites son L
   otros universos (quiénes son) — pendiente ANTES de generar sprites (Lote 5).
 - [ ] Anotar en `constitution.md` que una pantalla de explicación mínima (atract-mode) NO viola el Principio #3.
 - `tasks.md` de Fase 1 quedó desincronizado (todo `- [ ]` aunque el código ya corre). Actualizar al cerrar.
-- ⚠️ **Riesgo de scope** (lo hablamos): el alcance creció mucho. El sweet spot que tú mismo nombraste
-  aplica también al juego entero — terminar lotes chicos y jugables > acumular features.
+- **Scope ampliado a propósito:** el alcance creció y Rodolfo lo asume conscientemente ("vale la pena").
+  Mitigación acordada: lotes chicos y jugables, uno a la vez — no acumular features a medias.
