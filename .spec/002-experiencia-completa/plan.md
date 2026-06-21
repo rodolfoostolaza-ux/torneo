@@ -55,7 +55,7 @@ Cierre (4 hallazgos del review, ninguno alto) — HECHO:
 - [x] **Pantalla atract-mode de stats** (ficha de ejemplo anotada + ciclo de arquetipos — D1).
 - Cierre del review: doble-click en replay blindado (`{ once: true }`). Verificado por captura las 4 pantallas.
 
-### Lote 3 — Piel en el juego (código, sin assets nuevos) — HECHO (review 1 alta corregida; pendiente commit)
+### Lote 3 — Piel en el juego (código, sin assets nuevos) — HECHO (commit bf6ff77; review 1 alta corregida)
 - [x] **Selección de campeón** (D2): eliges 1 de los 16 (`renderChampionSelect`), `state.myChampion`.
   Carta resaltada con ★ en el matchup + barra "tu elegido" en el HUD; bono escalado por ronda que sobrevive
   (`CHAMP_BONUS=[25,40,60,100]` en `settle`); resumen en el cierre (`myChampLine`). Sigues apostando en todas.
@@ -69,6 +69,21 @@ Cierre (4 hallazgos del review, ninguno alto) — HECHO:
 - Verificado end-to-end con Playwright + mock de las APIs serverless: 0 errores de consola en el flujo nuevo.
 - Decisión: el bracket se dejó COMPACTO (progreso + ronda actual) a propósito; el árbol completo navegable
   queda como posible mejora si Rodolfo lo pide al ver el avance.
+
+### Lote Sonido (transversal, 100% código, CERO costo) — HECHO (review: 0 altas, 1 media corregida)
+Estaba parqueado fuera del plan original (Rodolfo lo pidió: el juego era mudo). Se construyó sin
+assets externos para no violar la regla de no subir/descargar archivos ni pagar nada.
+- [x] **Audio chiptune 100% sintetizado** (`js/audio.js`, WebAudio puro: osciladores + ráfaga de
+  ruido; cero archivos, cero descargas, cero licencias). Música de fondo por contexto
+  (title/combate/Uatu) con scheduler look-ahead + SFX de evento (ui, hit, coin, win/lose, champion,
+  gameover).
+- [x] **Ganchos sin tocar la lógica del motor** (cosmético puro): `playMatch` cambia la música según
+  el peso del combate; `applyDamageVisual` suena el golpe; `settle` paga 'coin' al acertar/bono; el
+  cierre suena fanfarria (campeón) o descenso fúnebre (game over). Blip de navegación delegado en botones.
+- [x] **Botón de mute** flotante, persistente en localStorage; el AudioContext respeta la política de
+  autoplay (arranca suspendido, se reanuda al primer gesto). Degrada a mudo si el navegador no trae WebAudio.
+- Verificado con Playwright + mock de las APIs: 3 combates + toggle + AudioContext creado = 0 errores de consola.
+- Cierre del review (codex/openrouter consensus): `localStorage.getItem` del mute blindado con try/catch (media).
 
 ### Lote 4 — Maquinaria de ocultos (código)
 - [ ] **Slot estilo SMB3** (el minijuego opt-in de §5): carriles, timing, premio escalonado.

@@ -195,3 +195,14 @@ input[type="text"], input[type="number"] {
 .bm .w { color: var(--win); flex: 1; }
 .bm .bd { color: var(--lose); font-size: 8px; flex: none; }
 .bm .l { color: var(--dim); flex: 1; text-align: right; text-decoration: line-through; }
+
+/* ── Toggle de sonido (lote audio) ── */
+.audio-toggle {
+  position: fixed; top: 10px; right: 10px; z-index: 50;
+  font-family: inherit; font-size: 14px; line-height: 1;
+  color: var(--ink); background: var(--panel2);
+  border: 3px solid var(--ink); padding: 6px 8px; cursor: pointer;
+  box-shadow: 3px 3px 0 #000;
+}
+.audio-toggle:hover { background: var(--panel); }
+.audio-toggle:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #000; }

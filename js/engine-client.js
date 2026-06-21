@@ -4,6 +4,7 @@
 import { currentMatch, placeBet, settle } from './state.js';
 import { renderMatchup, renderBetControls, renderBracket, renderHeader, showDialogue, hideDialogue, applyDamageVisual } from './render.js';
 import { BEATS, ARCHETYPES } from './config.js';
+import * as audio from './audio.js';
 
 function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
 
@@ -136,6 +137,7 @@ function preMatchLines(f1, f2, isUatu, myChampion) {
 
 export async function playMatch(state, dialogue) {
   const { fighter1, fighter2, matchId, isUatuFight } = currentMatch(state);
+  audio.music(isUatuFight ? 'uatu' : 'combat');   // el fondo cambia según el peso del combate
   renderHeader(state);
 
   // 1) odds (sin revelar resultado)
@@ -205,6 +207,8 @@ export async function playMatch(state, dialogue) {
 
   // 5) liquidar y avanzar
   settle(state, result);
+  const last = state.history.at(-1);   // ¿premio? acertaste la apuesta o tu elegido avanzó
+  if (last && ((last.bet && last.bet.won) || last.champBonus > 0)) audio.sfx('coin');
   renderHeader(state);
   renderBracket(state);
 }

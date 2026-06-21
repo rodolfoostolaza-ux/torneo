@@ -2,6 +2,7 @@
 // No decide nada del juego: solo dibuja matchup, apuesta, bracket y cierre.
 import { ARCHETYPES, BEATS, ROSTER } from './config.js';
 import { DialogueBox } from './dialogue.js';
+import * as audio from './audio.js';
 
 const el = id => document.getElementById(id);
 const pct = p => `${Math.round(p * 100)}%`;
@@ -266,6 +267,7 @@ function fighterCard(f, odd, mine) {
 // golpe visual terminó, para que el motor liquide después.
 export function applyDamageVisual(winnerId, loserId, damageToWinner) {
   return new Promise(resolve => {
+    audio.sfx('hit');               // el impacto suena justo con la sacudida
     swapBroken(loserId);
     shakeCard(loserId);
     shakeCard(winnerId);
@@ -498,6 +500,8 @@ function rollCredits(state, champ) {
 }
 
 function renderChampion(state, champ, won, total, onReplay) {
+  audio.music('title');             // vuelve el tema heroico para el cierre
+  audio.sfx('champion');            // fanfarria de victoria
   el('screen').innerHTML = `
     <div class="screen center">
       <div class="title">⊙ CAMPEÓN ⊙</div>
@@ -516,6 +520,8 @@ function renderChampion(state, champ, won, total, onReplay) {
 }
 
 function renderGameOver(state, champ, won, total, onReplay) {
+  audio.music(null);                // silencio sombrío tras
+  audio.sfx('gameover');            // descenso fúnebre
   el('screen').innerHTML = `
     <div class="screen center gameover">
       <div class="title lose-text">GAME OVER</div>
