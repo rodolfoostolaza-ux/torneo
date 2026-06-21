@@ -67,15 +67,15 @@ El triángulo cíclico del spec §2.2. Si el arquetipo de A vence al de B, A rec
 bono multiplicativo; si pierde, lo recibe B; si es neutral, nadie:
 
 ```
-ADV_BONUS = 0.20
-mult_arq(A vs B) = 1.20  si arq(A) vence a arq(B)
+ADV_BONUS = 0.25
+mult_arq(A vs B) = 1.25  si arq(A) vence a arq(B)
                  = 1.00  si neutral
                  = 1.00  (el bono lo recibe B en su propio cálculo)
 ```
 
-El bono del 20% es lo que hace que dos luchadores de stats parecidos den una
-probabilidad **claramente sesgada** hacia el que tiene ventaja (criterio de éxito del
-spec). El triángulo se codifica como un mapa `BEATS = { mistico: 'fuerza', fuerza:
+El bono del 25% es lo que hace que dos luchadores de stats parecidos den una
+probabilidad **claramente sesgada** hacia el que tiene ventaja (con stats iguales,
+≈0.61 para el favorecido; criterio de éxito del spec). El triángulo se codifica como un mapa `BEATS = { mistico: 'fuerza', fuerza:
 'peleador', peleador: 'tecnologo', tecnologo: 'velocista', velocista: 'mistico' }`.
 
 ### 2.3 Daño acumulado
