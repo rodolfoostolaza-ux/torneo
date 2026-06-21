@@ -4,6 +4,11 @@
 import { mulberry32, hash32 } from '../lib/prng.js';
 import { ROSTER, UATU } from './config.js';
 
+// Bono "tu elegido": $UATU que paga TU campeón por cada ronda que sobrevive
+// (índice = state.round). Escala para que llegar lejos con tu elegido se sienta.
+// No es apuesta: es la recompensa por identificarte (plan.md Lote 3, D2).
+const CHAMP_BONUS = [25, 40, 60, 100];
+
 // Fisher-Yates sembrado: misma semilla -> mismo orden (rejugabilidad).
 function seededShuffle(arr, seed) {
   const a = arr.slice();
@@ -40,6 +45,9 @@ export function createTournament(alias, torneoSeed) {
     alias, torneoSeed, coins: 0, fighters,
     bracket: [r1], round: 0, matchIndex: 0,
     bets: {}, history: [], phase: 'tournament', champion: null,
+    // myChampion: el luchador con el que TE identificas (D2). champBonus: total
+    // $UATU que te ha pagado por sobrevivir rondas (se muestra en el cierre).
+    myChampion: null, champBonus: 0,
   };
 }
 
@@ -100,9 +108,19 @@ export function settle(state, result) {
     state.fighters[result.winnerId].damage = result.damageToWinner;
   }
 
+  // Bono del elegido: si TU campeón gana este combate del torneo, te paga por
+  // ronda. No aplica en la pelea de Uatu (esa tiene su propio ×2 en el cierre).
+  let champBonus = 0;
+  if (state.phase === 'tournament' && state.myChampion && result.winnerId === state.myChampion) {
+    champBonus = CHAMP_BONUS[state.round] || 25;
+    state.coins += champBonus;
+    state.champBonus += champBonus;
+  }
+
   state.history.push({
     matchId: cm.matchId, winnerId: result.winnerId, loserId: result.loserId,
     bet: bet ? { fighterId: bet.fighterId, won, payout } : null,
+    champBonus,
   });
 
   if (state.phase === 'uatu') { state.phase = 'done'; return state; }

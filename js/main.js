@@ -1,7 +1,7 @@
 // js/main.js — punto de entrada. Pide alias, crea el torneo y corre el loop de
 // combates hasta el cierre contra Uatu.
 import { DialogueBox } from './dialogue.js';
-import { renderAlias, renderEnding, renderFatal, renderIntro, renderStatsAttract } from './render.js';
+import { renderAlias, renderEnding, renderFatal, renderIntro, renderStatsAttract, renderChampionSelect, renderRoundTransition } from './render.js';
 import { createTournament, isDone } from './state.js';
 import { playMatch, resetNarrateThrottle } from './engine-client.js';
 
@@ -14,11 +14,13 @@ const MAX_FAILS = 5;   // tope de reintentos del MISMO combate antes de rendirse
 
 async function runTournament(alias) {
   const state = createTournament(alias, newSeed());
+  state.myChampion = await renderChampionSelect(state);   // D2: eliges tu elegido
   const dialogue = new DialogueBox(document.getElementById('dialogue'));
   resetNarrateThrottle();          // partida nueva: sin espera fantasma heredada
   let fails = 0;
   while (!isDone(state)) {
     try {
+      await renderRoundTransition(state);   // pacing: cartel de ronda antes del combate
       await playMatch(state, dialogue);
       fails = 0;                   // avanzó: limpia el contador
     } catch (e) {

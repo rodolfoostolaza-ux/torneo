@@ -120,16 +120,115 @@ export function renderAlias() {
   });
 }
 
+// ── Selección de campeón (D2) ──────────────────────────────────────
+// Antes del primer combate eliges UNO de los 16 que entran al bracket. Te
+// identificas con él: cada ronda que sobreviva te paga $UATU (settle), pero
+// igual apuestas en todas. Mini-cartas (sprite + arquetipo, sin stats) en grilla.
+function pickCard(f) {
+  const a = arch(f.archetype);
+  return `
+    <button class="pick-card ${side(f)}" data-id="${esc(f.id)}">
+      <div class="portrait-wrap">
+        <img class="portrait" src="${spriteSrc(f.id, false)}" alt="${esc(f.name)}" loading="lazy" onerror="${ONERR}">
+      </div>
+      <div class="name">${esc(f.name)}</div>
+      <div class="arch">${a.icon} ${a.label}</div>
+    </button>`;
+}
+
+export function renderChampionSelect(state) {
+  return new Promise(resolve => {
+    el('hud').innerHTML = '';
+    const all = Object.values(state.fighters);
+    const marvel = all.filter(f => f.publisher === 'Marvel');
+    const dc = all.filter(f => f.publisher !== 'Marvel');
+    el('screen').innerHTML = `
+      <div class="screen champ-select">
+        <div class="title center">ELIGE A TU CAMPEÓN</div>
+        <div class="subtitle center">Uno de los 16. Cada ronda que sobreviva te paga $UATU — pero igual apuestas en TODAS las peleas.</div>
+        <div class="subtitle marvel-ink">MARVEL</div>
+        <div class="pick-grid">${marvel.map(pickCard).join('')}</div>
+        <div class="subtitle dc-ink">DC</div>
+        <div class="pick-grid">${dc.map(pickCard).join('')}</div>
+        <button id="champ-go" class="btn accent full" disabled>ELIGE UNO ↑</button>
+      </div>`;
+    let pickId = null;
+    const cards = [...document.querySelectorAll('.pick-card')];
+    const go = el('champ-go');
+    cards.forEach(c => c.addEventListener('click', () => {
+      pickId = c.dataset.id;
+      cards.forEach(x => x.classList.toggle('sel', x === c));
+      go.disabled = false;
+      go.textContent = `CONFIRMAR: ${state.fighters[pickId].name.toUpperCase()}`;
+    }));
+    // once: el confirmar cierra la pantalla; sin él un doble-toque resolvería dos veces.
+    go.addEventListener('click', () => { if (pickId) resolve(pickId); }, { once: true });
+  });
+}
+
+// ── Transición entre combates (pacing, Lote 3) ─────────────────────
+// Cartel retro antes de cada pelea en vez del salto seco de antes. Nueva ronda
+// (o la prueba de Uatu) = cartel grande y más tiempo; combate intermedio = breve.
+// Auto-avanza, o se salta con un toque (con guarda anti doble-click residual).
+const ROUND_NAMES = ['OCTAVOS DE FINAL', 'CUARTOS DE FINAL', 'SEMIFINAL', 'GRAN FINAL'];
+const SHORT_ROUNDS = ['OCTAVOS', 'CUARTOS', 'SEMIS', 'FINAL'];
+
+export function renderRoundTransition(state) {
+  return new Promise(resolve => {
+    let title, sub, big;
+    if (state.phase === 'uatu') {
+      title = '⊙ LA PRUEBA FINAL ⊙'; sub = 'El Observador baja a la arena.'; big = true;
+    } else {
+      title = ROUND_NAMES[state.round] || `RONDA ${state.round + 1}`;
+      sub = `Combate ${state.matchIndex + 1}`;
+      big = state.matchIndex === 0;     // arranque de ronda = cartel grande
+    }
+    el('hud').innerHTML = '';
+    el('screen').innerHTML = `
+      <div class="screen center transition">
+        <div class="title transition-title">${title}</div>
+        <div class="subtitle">${sub}</div>
+        <div class="subtitle dim">— toca para continuar —</div>
+      </div>`;
+    const startAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const finish = () => { clearTimeout(t); document.removeEventListener('click', onClick); resolve(); };
+    const onClick = () => {
+      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      if (now - startAt < 250) return;   // ignora el click residual que abrió esta pantalla
+      finish();
+    };
+    const t = setTimeout(finish, big ? 1500 : 850);
+    document.addEventListener('click', onClick);
+  });
+}
+
 // ── HUD persistente (alias, saldo, ronda) ──────────────────────────
+// ¿Tu elegido sigue en pie? Cayó si alguna vez fue el perdedor de un combate.
+export function champAlive(state) {
+  return state.myChampion && !state.history.some(h => h.loserId === state.myChampion);
+}
+
 export function renderHeader(state) {
   const ronda = state.phase === 'uatu' ? 'PRUEBA DE UATU'
     : `RONDA ${state.round + 1} · COMBATE ${state.matchIndex + 1}`;
+  let champLine = '';
+  if (state.myChampion) {
+    const mc = state.fighters[state.myChampion];
+    const alive = champAlive(state);
+    const dmg = mc.damage > 0 ? ` · daño ${Math.round(mc.damage * 100)}%` : '';
+    const status = alive ? `en pie${dmg}` : 'eliminado';
+    champLine = `
+      <div class="row between champ-bar ${alive ? '' : 'down'}">
+        <span class="subtitle">★ TU ELEGIDO</span>
+        <span class="subtitle">${esc(mc.name)} — ${status}</span>
+      </div>`;
+  }
   el('hud').innerHTML = `
     <div class="row between panel">
-      <span>${state.alias}</span>
+      <span>${esc(state.alias)}</span>
       <span class="subtitle">${ronda}</span>
       <span class="coins">$UATU ${state.coins}</span>
-    </div>`;
+    </div>${champLine}`;
 }
 
 function statBars(stats) {
@@ -140,14 +239,16 @@ function statBars(stats) {
     </div>`).join('');
 }
 
-function fighterCard(f, odd) {
+function fighterCard(f, odd, mine) {
   const a = arch(f.archetype);
   const dmg = f.damage > 0 ? `<div class="dmg">daño ${Math.round(f.damage * 100)}%</div>` : '';
   const oddHtml = odd != null ? `<div class="odds">${pct(odd)}</div>` : '';
+  const star = mine ? '<div class="mine-tag">★ TU ELEGIDO</div>' : '';
   // Si arrastra daño de una ronda previa, ya entra magullado.
   const src = spriteSrc(f.id, f.damage >= DMG_ROTO);
   return `
-    <div class="fighter-card ${side(f)}" data-id="${esc(f.id)}">
+    <div class="fighter-card ${side(f)}${mine ? ' mine' : ''}" data-id="${esc(f.id)}">
+      ${star}
       <div class="portrait-wrap">
         <img class="portrait" src="${src}" alt="${esc(f.name)}" loading="lazy" onerror="${ONERR}">
       </div>
@@ -191,7 +292,7 @@ function shakeCard(id) {
 }
 
 // ── Matchup ────────────────────────────────────────────────────────
-export function renderMatchup(f1, f2, odds, isUatu) {
+export function renderMatchup(f1, f2, odds, isUatu, myChampion) {
   const banner = isUatu
     ? `<div class="title center">⊙ LA PRUEBA FINAL ⊙</div>`
     : '';
@@ -199,9 +300,9 @@ export function renderMatchup(f1, f2, odds, isUatu) {
     <div class="screen">
       ${banner}
       <div class="row">
-        ${fighterCard(f1, odds.probability1)}
+        ${fighterCard(f1, odds.probability1, f1.id === myChampion)}
         <span class="vs">VS</span>
-        ${fighterCard(f2, odds.probability2)}
+        ${fighterCard(f2, odds.probability2, f2.id === myChampion)}
       </div>
       <div id="betarea"></div>
       <div id="bracketarea"></div>
@@ -250,16 +351,69 @@ export function renderBetControls(f1, f2, coins) {
   });
 }
 
-// ── Bracket / historial ────────────────────────────────────────────
+// ── Bracket lateral (progreso + daño acumulado en vivo, Lote 3) ────
+// Barra de rondas (octavos → Uatu) + los combates ya resueltos de la ronda en
+// curso, con el daño que arrastra cada ganador vivo. Tu elegido va con ★.
+const fighterName = (state, id) => state.fighters[id]?.name || (id === 'uatu' ? 'Uatu' : id);
+
 export function renderBracket(state) {
   const area = el('bracketarea');
   if (!area) return;
-  const names = id => state.fighters[id]?.name || (id === 'uatu' ? 'Uatu' : id);
-  const rows = state.history.slice(-6).map(h => {
-    const res = h.bet ? (h.bet.won ? `+${h.bet.payout}` : '—') : '';
-    return `<div class="match"><span>${h.matchId}</span><span class="w">${names(h.winnerId)}</span><span class="coins">${res}</span></div>`;
-  }).join('');
-  area.innerHTML = `<div class="panel bracket"><div class="round-title">RESULTADOS</div>${rows || '<div class="subtitle">—</div>'}</div>`;
+  const mine = state.myChampion;
+  const star = id => id === mine ? '★ ' : '';
+
+  // Barra de progreso de rondas (la última etapa es la prueba de Uatu).
+  const steps = [...SHORT_ROUNDS, 'UATU'];
+  // done = todo completado (curIdx fuera de rango → ningún paso queda 'cur').
+  const curIdx = state.phase === 'done' ? steps.length : (state.phase === 'uatu' ? 4 : state.round);
+  const prog = steps.map((s, i) =>
+    `<span class="step ${i === curIdx ? 'cur' : (i < curIdx ? 'done' : '')}">${s}</span>`
+  ).join('<span class="sep">▸</span>');
+
+  // Resultados de la ronda en curso, con daño en vivo del ganador.
+  let rows = '<div class="subtitle dim">— ronda en marcha —</div>';
+  let title = state.phase === 'uatu' ? 'PRUEBA DE UATU' : (SHORT_ROUNDS[state.round] || '');
+  if (state.phase === 'tournament') {
+    const done = state.bracket[state.round].filter(m => m.resolved);
+    if (done.length) {
+      rows = done.map(m => {
+        const dmg = state.fighters[m.winnerId] ? `${Math.round(state.fighters[m.winnerId].damage * 100)}%` : '';
+        return `<div class="bm">
+          <span class="w">${star(m.winnerId)}${esc(fighterName(state, m.winnerId))}</span>
+          <span class="bd">${dmg}</span>
+          <span class="l">${star(m.loserId)}${esc(fighterName(state, m.loserId))}</span>
+        </div>`;
+      }).join('');
+    }
+  }
+  area.innerHTML = `
+    <div class="panel tourney">
+      <div class="tourney-prog">${prog}</div>
+      <div class="round-title">${title}</div>
+      ${rows}
+    </div>`;
+}
+
+// Nombre de ronda a partir del matchId (R1-Mx → octavos…), para el cierre.
+function roundLabelOf(matchId) {
+  const m = /^R(\d)/.exec(matchId || '');
+  if (!m) return 'el camino';
+  return ['octavos', 'cuartos', 'la semifinal', 'la final'][Number(m[1]) - 1] || 'el camino';
+}
+
+// Resumen de tu elegido para el cierre: ¿llegó al final o dónde cayó?
+function myChampLine(state) {
+  if (!state.myChampion) return '';
+  const mc = state.fighters[state.myChampion];
+  let fate;
+  if (state.champion === state.myChampion) {
+    fate = 'tu elegido, llegó hasta el final del puente';
+  } else {
+    const fell = state.history.find(h => h.loserId === state.myChampion);
+    fate = `tu elegido, cayó en ${roundLabelOf(fell && fell.matchId)}`;
+  }
+  const bonus = state.champBonus > 0 ? ` Te dio $UATU ${state.champBonus}.` : '';
+  return `<div class="record">★ ${esc(mc.name)}, ${fate}.${bonus}</div>`;
 }
 
 // ── Mostrar/ocultar caja de diálogo ────────────────────────────────
@@ -351,6 +505,7 @@ function renderChampion(state, champ, won, total, onReplay) {
       <div class="close-champ">🏆 ${esc(champ ? champ.name : '—')}</div>
       <div class="panel">
         <div class="subtitle">El Observador parpadeó. El multiverso resiste un día más.</div>
+        ${myChampLine(state)}
         <div class="record">Aciertos: ${won}/${total}</div>
         <div class="record coins">BONUS UATU ×2 → Saldo: $UATU ${state.coins}</div>
       </div>
@@ -368,6 +523,7 @@ function renderGameOver(state, champ, won, total, onReplay) {
       <div class="panel">
         <div class="subtitle">${esc(champ ? champ.name : 'Tu campeón')} cayó ante Uatu. El Observador ni se inmuta.</div>
         <div class="subtitle dim">Otro multiverso a la basura.</div>
+        ${myChampLine(state)}
         <div class="record">Aciertos: ${won}/${total}</div>
         <div class="record coins">Saldo final: $UATU ${state.coins}</div>
       </div>

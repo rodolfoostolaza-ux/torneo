@@ -153,3 +153,45 @@ input[type="text"], input[type="number"] {
 .gloss .gk { color: var(--accent); width: 30px; flex: none; }
 .gloss .gv { color: var(--dim); }
 .cycle { color: var(--ink); font-size: 9px; line-height: 1.8; margin-top: 6px; }
+
+/* ── Selección de campeón (Lote 3) ── */
+.champ-select { gap: 8px; }
+.pick-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.pick-card {
+  font-family: inherit; color: var(--ink); background: var(--panel2);
+  border: 3px solid var(--ink); padding: 6px; cursor: pointer; box-shadow: 3px 3px 0 #000;
+  display: flex; flex-direction: column; gap: 4px; text-align: center;
+}
+.pick-card.marvel { border-top: 5px solid var(--marvel); }
+.pick-card.dc { border-top: 5px solid var(--dc); }
+.pick-card:hover { background: var(--panel); }
+.pick-card.sel { outline: 3px solid var(--accent); background: var(--panel); }
+.pick-card .portrait-wrap { border-width: 1px; }
+.pick-card .name { font-size: 8px; line-height: 1.4; }
+.pick-card .arch { font-size: 8px; color: var(--dim); }
+
+/* ── Tu elegido: carta resaltada en el matchup + barra en el HUD ── */
+.fighter-card.mine { outline: 3px solid var(--accent); }
+.mine-tag { font-size: 8px; color: var(--accent); text-align: center; letter-spacing: 1px; }
+.champ-bar { margin-top: 6px; padding: 4px 10px; border-left: 4px solid var(--accent); background: var(--panel2); }
+.champ-bar .subtitle { color: var(--accent); }
+.champ-bar.down { border-left-color: var(--lose); opacity: 0.75; }
+.champ-bar.down .subtitle { color: var(--lose); }
+
+/* ── Transición de ronda (pacing) ── */
+.transition { padding-top: 56px; gap: 16px; animation: wipe 0.35s ease-out; }
+.transition-title { font-size: 22px; }
+@keyframes wipe { from { opacity: 0; letter-spacing: 14px; } to { opacity: 1; letter-spacing: 2px; } }
+
+/* ── Bracket lateral (progreso + daño en vivo) ── */
+.tourney { margin-top: 12px; }
+.tourney-prog { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; font-size: 8px; margin-bottom: 8px; }
+.tourney-prog .step { color: var(--dim); }
+.tourney-prog .step.done { color: var(--ink); }
+.tourney-prog .step.cur { color: var(--accent); }
+.tourney-prog .sep { color: #3a4179; margin: 0 2px; }
+.tourney .round-title { color: var(--accent); font-size: 10px; margin-bottom: 6px; }
+.bm { display: flex; align-items: center; gap: 6px; font-size: 9px; padding: 2px 0; }
+.bm .w { color: var(--win); flex: 1; }
+.bm .bd { color: var(--lose); font-size: 8px; flex: none; }
+.bm .l { color: var(--dim); flex: 1; text-align: right; text-decoration: line-through; }

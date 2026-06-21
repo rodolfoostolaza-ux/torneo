@@ -110,6 +110,30 @@ function fallbackNarration(result, f1, f2, isUatu) {
   };
 }
 
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+
+// Presentación PRE-combate, local (sin API: no gasta el cupo de Cerebras). Da
+// contexto y marca a tu elegido SIN spoilear — solo nombres y arquetipos como
+// color. La plantilla varía de forma determinista (mismo combate → misma frase).
+function preMatchLines(f1, f2, isUatu, myChampion) {
+  if (isUatu) {
+    return [
+      `${f1.name} ha cruzado el puente entero.`,
+      `Al otro lado aguarda Uatu. Aquí no hay favorito seguro.`,
+    ];
+  }
+  const tag = id => (id === myChampion ? ' (tu elegido)' : '');
+  const a1 = ARCHETYPES[f1.archetype].label.toLowerCase();
+  const a2 = ARCHETYPES[f2.archetype].label.toLowerCase();
+  const openers = [
+    `${f1.name}${tag(f1.id)} encara a ${f2.name}${tag(f2.id)}.`,
+    `${f1.name}${tag(f1.id)} y ${f2.name}${tag(f2.id)} pisan la arena.`,
+    `Frente a frente: ${f1.name}${tag(f1.id)} contra ${f2.name}${tag(f2.id)}.`,
+  ];
+  const h = (f1.id + f2.id).split('').reduce((s, c) => s + c.charCodeAt(0), 0);
+  return [openers[h % openers.length], `${cap(a1)} contra ${a2}. El puente cruje.`];
+}
+
 export async function playMatch(state, dialogue) {
   const { fighter1, fighter2, matchId, isUatuFight } = currentMatch(state);
   renderHeader(state);
@@ -117,11 +141,24 @@ export async function playMatch(state, dialogue) {
   // 1) odds (sin revelar resultado)
   const odds = await api('/api/resolve',
     { fighter1, fighter2, torneoSeed: state.torneoSeed, matchId, reveal: false });
-  renderMatchup(fighter1, fighter2, odds, isUatuFight);
+  renderMatchup(fighter1, fighter2, odds, isUatuFight, state.myChampion);
+  renderBracket(state);   // contexto visible mientras apuestas: resultados + daño en vivo
 
-  // 2) apuesta obligatoria. Si reintentamos un combate donde ya apostaste, no
-  // vuelvas a pedir la apuesta (evita el doble widget en un reintento de combate).
+  // En un reintento de combate ya apostaste: no repitas ni el pre-combate ni el
+  // widget de apuesta (el estado quedó intacto, settle solo corre al final).
   const existingBet = state.bets[matchId];
+
+  // 1b) PRE-COMBATE: presentación local, un beat propio antes de apostar.
+  if (!existingBet) {
+    try {
+      showDialogue();
+      await dialogue.show(preMatchLines(fighter1, fighter2, isUatuFight, state.myChampion));
+    } finally {
+      hideDialogue();
+    }
+  }
+
+  // 2) apuesta obligatoria.
   if (!existingBet || existingBet.settled) {
     const bet = await renderBetControls(fighter1, fighter2, state.coins);
     placeBet(state, bet.fighterId, bet.amount);
@@ -153,15 +190,18 @@ export async function playMatch(state, dialogue) {
   const lines = (narr.lines && narr.lines.length)
     ? narr.lines : fallbackNarration(result, fighter1, fighter2, isUatuFight).lines;
   const tail = [narr.loserFate, narr.winnerScar].filter(Boolean);
+
+  // DESARROLLO → golpe visual → CONSECUENCIAS. El golpe parte la narración: la
+  // pelea revela al ganador, las cartas se sacuden y el perdedor queda roto, y
+  // recién entonces caen las consecuencias como beat post-combate aparte.
   try {
     showDialogue();
-    await dialogue.show([...lines, ...tail]);
+    await dialogue.show(lines);
+    await applyDamageVisual(result.winnerId, result.loserId, result.damageToWinner);
+    if (tail.length) await dialogue.show(tail);
   } finally {
     hideDialogue();   // pase lo que pase, no dejar el diálogo ni su listener colgado
   }
-
-  // 4b) golpe visual sobre las cartas aún en pantalla: el perdedor queda roto.
-  await applyDamageVisual(result.winnerId, result.loserId, result.damageToWinner);
 
   // 5) liquidar y avanzar
   settle(state, result);

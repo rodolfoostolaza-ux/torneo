@@ -55,12 +55,20 @@ Cierre (4 hallazgos del review, ninguno alto) — HECHO:
 - [x] **Pantalla atract-mode de stats** (ficha de ejemplo anotada + ciclo de arquetipos — D1).
 - Cierre del review: doble-click en replay blindado (`{ once: true }`). Verificado por captura las 4 pantallas.
 
-### Lote 3 — Piel en el juego (código, sin assets nuevos)
-- [ ] **Selección de campeón** (D2) + seguir apostando en todas las peleas.
-- [ ] **Brackets laterales** con daño acumulado en vivo.
-- [ ] **Pacing entre combates**: transición con retro, no el cambio instantáneo de hoy.
-- [ ] **Diálogos pre Y post combate** como momento propio. Hoy solo hay 2 frases de cierre pegadas a
-  la narración (`loserFate`/`winnerScar`); faltan los diálogos de verdad, antes y después.
+### Lote 3 — Piel en el juego (código, sin assets nuevos) — HECHO (review 1 alta corregida; pendiente commit)
+- [x] **Selección de campeón** (D2): eliges 1 de los 16 (`renderChampionSelect`), `state.myChampion`.
+  Carta resaltada con ★ en el matchup + barra "tu elegido" en el HUD; bono escalado por ronda que sobrevive
+  (`CHAMP_BONUS=[25,40,60,100]` en `settle`); resumen en el cierre (`myChampLine`). Sigues apostando en todas.
+- [x] **Bracket lateral** con daño en vivo: barra de rondas (octavos→Uatu) + resultados de la ronda actual
+  con daño del ganador; ★ marca tu elegido. `renderBracket` ahora se pinta al iniciar el combate (era invisible).
+- [x] **Pacing entre combates**: `renderRoundTransition` (cartel de ronda con wipe, auto-avanza o se salta).
+- [x] **Diálogos pre Y post combate**: pre-combate local sin API (`preMatchLines`, no gasta Cerebras);
+  post-combate reordenado como beat propio TRAS el golpe visual (desarrollo → golpe → consecuencias).
+- Cierre del review (codex): XSS de `state.alias` en `renderHeader` blindado con `esc()` (bug preexistente);
+  + 2 medias triviales (no repetir pre-combate en reintentos; UATU no se marca activo en `phase done`).
+- Verificado end-to-end con Playwright + mock de las APIs serverless: 0 errores de consola en el flujo nuevo.
+- Decisión: el bracket se dejó COMPACTO (progreso + ronda actual) a propósito; el árbol completo navegable
+  queda como posible mejora si Rodolfo lo pide al ver el avance.
 
 ### Lote 4 — Maquinaria de ocultos (código)
 - [ ] **Slot estilo SMB3** (el minijuego opt-in de §5): carriles, timing, premio escalonado.
