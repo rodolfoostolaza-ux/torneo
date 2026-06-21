@@ -1,10 +1,8 @@
+// api/narrate.js — el "vestido" de la pelea. Recibe el ganador YA decidido por el
+// motor (lib/combat via /api/resolve) y devuelve narración corta para cajas RPG.
+// La IA nunca decide quién gana (plan.md §4). Mismo candado de Origin y timeout
+// que el resto de la API.
 export default async function handler(req, res) {
-  // Allowlist de orígenes (configurable por env var ALLOWED_ORIGINS, separados
-  // por coma; default = dominio de producción). Candado básico: frena el abuso
-  // casual del endpoint (otros sitios embebiéndolo, scripts sin Origin). NO
-  // detiene a quien falsifique el header Origin — para eso haría falta rate-limit.
-  // Normaliza quitando barra(s) final(es): el header Origin nunca trae barra,
-  // pero la env var podría configurarse con ella y romper el match (403 falso).
   const stripSlash = s => s.replace(/\/+$/, '');
   const allowed = (process.env.ALLOWED_ORIGINS || 'https://torneo-convergencia.vercel.app')
     .split(',').map(s => stripSlash(s.trim())).filter(Boolean);
@@ -17,112 +15,77 @@ export default async function handler(req, res) {
   res.setHeader('Vary', 'Origin');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!isAllowed) return res.status(403).json({ error: 'Origin not allowed' });
 
-  if (!isAllowed) {
-    return res.status(403).json({ error: 'Origin not allowed' });
-  }
-
-  const { fighter1, fighter2, round, isUatuFight } = req.body;
-
-  if (!fighter1 || !fighter2) {
-    return res.status(400).json({ error: 'Missing fighter data' });
+  const { winner, loser, reason, isUatuFight } = req.body || {};
+  if (!winner || !loser) {
+    return res.status(400).json({ error: 'Missing winner/loser data' });
   }
 
   const apiKey = process.env.CEREBRAS_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'CEREBRAS_API_KEY not configured' });
-  }
+  if (!apiKey) return res.status(500).json({ error: 'CEREBRAS_API_KEY not configured' });
 
-  const ss = f =>
-    `intelligence:${f.stats.intelligence} strength:${f.stats.strength} ` +
-    `speed:${f.stats.speed} durability:${f.stats.durability} ` +
-    `power:${f.stats.power} combat:${f.stats.combat}`;
-
-  const dd = f => f.damage ? ` [daño previo: ${f.damage}]` : '';
-
+  const motivo = reason || 'la diferencia de poder fue decisiva';
   let prompt;
   if (isUatuFight) {
-    // fighter1 = Uatu, fighter2 = champion
+    // En la prueba final el protagonista es SIEMPRE el campeón (el que no es Uatu),
+    // que la supera con sacrificio — reencuadre narrativo, no del motor (plan §G1).
+    const champ = (winner && winner.id === 'uatu') ? loser : winner;
     prompt =
-      `Narra en español la prueba final cósmica en la que Uatu el Observador ` +
-      `(stats: ${ss(fighter1)}) pone a prueba al campeón ${fighter2.name} (${fighter2.publisher}, ` +
-      `stats: ${ss(fighter2)})${dd(fighter2)}. ` +
-      `EL CAMPEÓN DEBE GANAR ESTA PRUEBA FINAL aunque con gran sacrificio. ` +
-      `Describe los poderes específicos de ${fighter2.name} y cómo los usa para superar a Uatu. ` +
-      `Escribe 4 párrafos cinematográficos épicos en español. ` +
-      `Termina EXACTAMENTE con: ` +
-      `GANADOR: ${fighter2.name} | ` +
-      `MUERTE: Uatu revela que nunca pretendió matar al campeón; la prueba era para encontrar al ser capaz de salvar el multiverso de una colisión de universos | ` +
-      `DAÑO: ${fighter2.name} quedó con cicatrices cósmicas que brillan eternamente como prueba de su victoria`;
+      `Eres el narrador de un juego estilo cartucho SNES, en español.\n` +
+      `${champ.name} (${champ.publisher}) enfrenta la prueba final de Uatu el Observador.\n` +
+      `El campeón SUPERA la prueba con gran sacrificio. Uatu revela que buscaba al ser ` +
+      `capaz de salvar el multiverso de una colisión de universos.\n` +
+      `Narra en EXACTAMENTE 3 líneas CORTAS de caja de diálogo RPG (máx ~12 palabras ` +
+      `por línea, épicas, cero párrafos). Luego el sentido de la prueba en 1 frase y ` +
+      `la cicatriz cósmica del campeón en 1 frase.\n` +
+      `Responde SOLO JSON: {"lines":["..","..",".."],"loserFate":"..","winnerScar":".."}`;
   } else {
     prompt =
-      `Narra en español un combate épico a muerte en la arena cósmica de Uatu entre ` +
-      `${fighter1.name} (${fighter1.publisher}, stats: ${ss(fighter1)})${dd(fighter1)} ` +
-      `VS ${fighter2.name} (${fighter2.publisher}, stats: ${ss(fighter2)})${dd(fighter2)}. ` +
-      `Ronda: ${round}. ` +
-      `Describe los poderes específicos de cada personaje, sus tácticas de combate y cómo sus stats determinan el resultado. ` +
-      `Escribe 3-4 párrafos cinematográficos épicos en español. ` +
-      `Mejor stats = más probabilidad de ganar, pero los upsets son posibles y deseables. ` +
-      `Termina EXACTAMENTE así en la última línea: ` +
-      `GANADOR: [nombre exacto de arriba] | MUERTE: [cómo murió el perdedor, 2 oraciones brutales] | DAÑO: [daño físico visible que quedó en el ganador, 1 oración]`;
+      `Eres el narrador de un juego de pelea estilo cartucho SNES, en español.\n` +
+      `${winner.name} (${winner.publisher}) derrotó a ${loser.name} (${loser.publisher}).\n` +
+      `Factor decisivo: ${motivo}.\n` +
+      `Narra el desenlace en EXACTAMENTE 3 líneas CORTAS de caja de diálogo RPG ` +
+      `(máx ~12 palabras por línea, punzantes, cero párrafos). Luego el destino del ` +
+      `perdedor en 1 frase y la cicatriz del ganador en 1 frase.\n` +
+      `Responde SOLO JSON: {"lines":["..","..",".."],"loserFate":"..","winnerScar":".."}`;
   }
 
-  const cerebrasUrl =
-    `https://api.cerebras.ai/v1/chat/completions`;
-
-  // Timeout duro: si Cerebras no responde en 15s, abortamos en vez de dejar
-  // colgada la función serverless (Vercel la mataría a los 300s y el usuario
-  // se quedaría esperando). El frontend tiene su fallbackNarr para este caso.
+  // Timeout duro: si Cerebras no responde en 15s, abortamos. El cliente tiene su
+  // fallbackNarration para este caso (la narración es cosmética).
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
 
   try {
-    const r = await fetch(cerebrasUrl, {
+    const r = await fetch('https://api.cerebras.ai/v1/chat/completions', {
       method: 'POST',
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
         // Cerebras está detrás de Cloudflare y bloquea User-Agents "de bot"
-        // con HTTP 403 (error code 1010). Un UA de browser lo evita.
+        // (HTTP 403, code 1010). Un UA de browser lo evita.
         'User-Agent': 'Mozilla/5.0',
       },
       body: JSON.stringify({
         model: 'gpt-oss-120b',
         messages: [{ role: 'user', content: prompt }],
-        temperature: 0.95,
-        max_completion_tokens: 4000,
-        // gpt-oss-120b es modelo de razonamiento; "low" minimiza el costo del
-        // razonamiento (no hace falta para narrar) y deja la respuesta final
-        // limpia en message.content (el razonamiento va aparte en .reasoning).
-        reasoning_effort: 'low'
-      })
+        temperature: 0.9,
+        max_completion_tokens: 600,
+        reasoning_effort: 'low',
+      }),
     });
 
     const d = await r.json();
-
     if (!r.ok || d.error) {
       return res.status(502).json({ error: d.error?.message || `Cerebras HTTP ${r.status}` });
     }
 
     const text = d.choices?.[0]?.message?.content || '';
-    if (!text) {
-      return res.status(502).json({ error: 'Empty response from Cerebras' });
-    }
+    if (!text) return res.status(502).json({ error: 'Empty response from Cerebras' });
 
-    const ganadorM    = text.match(/GANADOR:\s*([^\|\n]+)/i);
-    const muerteM     = text.match(/MUERTE:\s*([^\|\n]+)/i);
-    const dañoM       = text.match(/DA[NÑ]O:\s*([^\|\n]+)/i);
-
-    const winnerName   = ganadorM ? ganadorM[1].trim() : '';
-    const loserFate    = muerteM  ? muerteM[1].trim()  : 'Cayó derrotado en combate mortal.';
-    const winnerDamage = dañoM    ? dañoM[1].trim()    : 'Quedó con heridas menores del combate.';
-    const narration    = text.replace(/GANADOR:.*$/is, '').trim();
-
-    return res.status(200).json({ narration, winnerName, loserFate, winnerDamage, epilogue: narration });
+    return res.status(200).json(parseNarration(text));
   } catch (e) {
     if (e.name === 'AbortError') {
       return res.status(504).json({ error: 'Cerebras tardó demasiado (timeout 15s)' });
@@ -131,4 +94,29 @@ export default async function handler(req, res) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+// Extrae {lines, loserFate, winnerScar} del content. Intenta JSON; si no parsea,
+// parte el texto en líneas cortas como respaldo.
+function parseNarration(text) {
+  const m = text.match(/\{[\s\S]*\}/);
+  if (m) {
+    try {
+      const o = JSON.parse(m[0]);
+      const lines = Array.isArray(o.lines) ? o.lines.filter(Boolean).slice(0, 4) : [];
+      if (lines.length) {
+        return {
+          lines,
+          loserFate: o.loserFate || '',
+          winnerScar: o.winnerScar || '',
+        };
+      }
+    } catch { /* cae al respaldo de abajo */ }
+  }
+  const parts = text.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 5);
+  return {
+    lines: parts.slice(0, 3),
+    loserFate: parts[3] || '',
+    winnerScar: parts[4] || '',
+  };
 }
