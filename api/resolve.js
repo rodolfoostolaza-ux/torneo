@@ -25,6 +25,7 @@ export default async function handler(req, res) {
   try {
     return res.status(200).json(resolve(fighter1, fighter2, torneoSeed, matchId, !!reveal));
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    console.error('resolve error:', e);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }

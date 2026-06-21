@@ -23,18 +23,25 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing winner/loser data' });
   }
 
+  // Sanitiza lo que viene del cliente antes de interpolarlo en el prompt: corta la
+  // inyección de instrucciones vía nombres/publisher/motivo manipulados.
+  const clean = (s, n = 40) => String(s ?? '').replace(/[^\p{L}\p{N} .,'\-!¡?¿]/gu, '').slice(0, n);
+  const wName = clean(winner.name), wPub = clean(winner.publisher, 20);
+  const lName = clean(loser.name), lPub = clean(loser.publisher, 20);
+
   const apiKey = process.env.CEREBRAS_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'CEREBRAS_API_KEY not configured' });
 
-  const motivo = reason || 'la diferencia de poder fue decisiva';
+  const motivo = clean(reason, 120) || 'la diferencia de poder fue decisiva';
   let prompt;
   if (isUatuFight) {
     // En la prueba final el protagonista es SIEMPRE el campeón (el que no es Uatu),
     // que la supera con sacrificio — reencuadre narrativo, no del motor (plan §G1).
     const champ = (winner && winner.id === 'uatu') ? loser : winner;
+    const cName = clean(champ.name), cPub = clean(champ.publisher, 20);
     prompt =
       `Eres el narrador de un juego estilo cartucho SNES, en español.\n` +
-      `${champ.name} (${champ.publisher}) enfrenta la prueba final de Uatu el Observador.\n` +
+      `${cName} (${cPub}) enfrenta la prueba final de Uatu el Observador.\n` +
       `El campeón SUPERA la prueba con gran sacrificio. Uatu revela que buscaba al ser ` +
       `capaz de salvar el multiverso de una colisión de universos.\n` +
       `Narra en EXACTAMENTE 3 líneas CORTAS de caja de diálogo RPG (máx ~12 palabras ` +
@@ -44,7 +51,7 @@ export default async function handler(req, res) {
   } else {
     prompt =
       `Eres el narrador de un juego de pelea estilo cartucho SNES, en español.\n` +
-      `${winner.name} (${winner.publisher}) derrotó a ${loser.name} (${loser.publisher}).\n` +
+      `${wName} (${wPub}) derrotó a ${lName} (${lPub}).\n` +
       `Factor decisivo: ${motivo}.\n` +
       `Narra el desenlace en EXACTAMENTE 3 líneas CORTAS de caja de diálogo RPG ` +
       `(máx ~12 palabras por línea, punzantes, cero párrafos). Luego el destino del ` +
@@ -90,7 +97,8 @@ export default async function handler(req, res) {
     if (e.name === 'AbortError') {
       return res.status(504).json({ error: 'Cerebras tardó demasiado (timeout 15s)' });
     }
-    return res.status(500).json({ error: e.message });
+    console.error('narrate error:', e);
+    return res.status(500).json({ error: 'Internal server error' });
   } finally {
     clearTimeout(timeout);
   }
