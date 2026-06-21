@@ -2,7 +2,7 @@
 // El cliente nunca decide el ganador: lo pide a /api/resolve y solo viste el
 // resultado con /api/narrate (con fallback local si la IA falla).
 import { currentMatch, placeBet, settle } from './state.js';
-import { renderMatchup, renderBetControls, renderBracket, renderHeader, showDialogue, hideDialogue } from './render.js';
+import { renderMatchup, renderBetControls, renderBracket, renderHeader, showDialogue, hideDialogue, applyDamageVisual } from './render.js';
 import { BEATS, ARCHETYPES } from './config.js';
 
 async function api(path, body) {
@@ -48,14 +48,27 @@ function fallbackNarration(result, f1, f2, isUatu) {
   const winner = winnerOf(result, f1, f2);
   const loser  = loserOf(result, f1, f2);
   if (isUatu) {
+    const champ = winner.id === 'uatu' ? loser : winner;
+    const champWon = winner.id !== 'uatu';
+    if (champWon) {
+      return {
+        lines: [
+          `Uatu pone a prueba a ${champ.name}.`,
+          `${buildReason(f1, f2, result)}.`,
+          `El multiverso contiene el aliento.`,
+        ],
+        loserFate: `Uatu se inclina: la prueba ha sido superada.`,
+        winnerScar: `${champ.name} arde con cicatrices cósmicas.`,
+      };
+    }
     return {
       lines: [
-        `Uatu pone a prueba a ${winner.name}.`,
-        `${buildReason(f1, f2, result)}.`,
-        `El multiverso contiene el aliento.`,
+        `Uatu pone a prueba a ${champ.name}.`,
+        `${champ.name} no da el ancho.`,
+        `Uatu suspira: otro multiverso a la basura.`,
       ],
-      loserFate: `Uatu se inclina: la prueba ha sido superada.`,
-      winnerScar: `${winner.name} arde con cicatrices cósmicas.`,
+      loserFate: `${champ.name} cae; el Observador ni se inmuta.`,
+      winnerScar: `El multiverso colapsa. Uatu ya busca al siguiente.`,
     };
   }
   return {
@@ -102,6 +115,9 @@ export async function playMatch(state, dialogue) {
   showDialogue();
   await dialogue.show([...lines, ...tail]);
   hideDialogue();
+
+  // 4b) golpe visual sobre las cartas aún en pantalla: el perdedor queda roto.
+  await applyDamageVisual(result.winnerId, result.loserId, result.damageToWinner);
 
   // 5) liquidar y avanzar
   settle(state, result);

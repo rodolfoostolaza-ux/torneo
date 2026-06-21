@@ -6,6 +6,18 @@ const el = id => document.getElementById(id);
 const pct = p => `${Math.round(p * 100)}%`;
 const side = f => (f.publisher === 'Marvel' ? 'marvel' : 'dc');
 const arch = a => ARCHETYPES[a] || { icon: '❓', label: a };
+// Escapa antes de interpolar en innerHTML. Hoy los nombres/ids son constantes del
+// ROSTER, pero esto blinda atributos y texto por si alguna vez son dinámicos.
+const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+// Umbral de daño a partir del cual el retrato pasa a la versión "roto".
+// El ganador que entra a la siguiente ronda con daño >= esto se ve magullado.
+const DMG_ROTO = 0.5;
+const spriteSrc = (id, broken) => `assets/fighters/${id}${broken ? '_roto' : ''}.png`;
+// Si falta el sprite (batch a medias o archivo caído), oculta el marco y la
+// carta queda en modo solo-texto, como antes de los retratos.
+const ONERR = "this.closest('.portrait-wrap').style.display='none'";
 
 const STAT_LABELS = {
   intelligence: 'INT', strength: 'FUE', speed: 'VEL',
@@ -62,14 +74,50 @@ function fighterCard(f, odd) {
   const a = arch(f.archetype);
   const dmg = f.damage > 0 ? `<div class="dmg">daño ${Math.round(f.damage * 100)}%</div>` : '';
   const oddHtml = odd != null ? `<div class="odds">${pct(odd)}</div>` : '';
+  // Si arrastra daño de una ronda previa, ya entra magullado.
+  const src = spriteSrc(f.id, f.damage >= DMG_ROTO);
   return `
-    <div class="fighter-card ${side(f)}" data-id="${f.id}">
-      <div class="name">${f.name}</div>
+    <div class="fighter-card ${side(f)}" data-id="${esc(f.id)}">
+      <div class="portrait-wrap">
+        <img class="portrait" src="${src}" alt="${esc(f.name)}" loading="lazy" onerror="${ONERR}">
+      </div>
+      <div class="name">${esc(f.name)}</div>
       <div class="pub ${side(f)}">${f.publisher}</div>
       <div class="arch">${a.icon} ${a.label}</div>
       ${oddHtml}${dmg}
       ${statBars(f.stats)}
     </div>`;
+}
+
+// Efecto al cerrarse el combate (cartas aún en pantalla tras el diálogo):
+// el perdedor tiembla y pasa a su retrato roto; el ganador tiembla y solo
+// pasa a roto si el combate lo dejó por encima del umbral. Resuelve cuando el
+// golpe visual terminó, para que el motor liquide después.
+export function applyDamageVisual(winnerId, loserId, damageToWinner) {
+  return new Promise(resolve => {
+    swapBroken(loserId);
+    shakeCard(loserId);
+    shakeCard(winnerId);
+    if (damageToWinner >= DMG_ROTO) swapBroken(winnerId);
+    setTimeout(resolve, 750);
+  });
+}
+
+function swapBroken(id) {
+  const img = document.querySelector(`.fighter-card[data-id="${id}"] img.portrait`);
+  if (!img) { console.warn('[render] swapBroken: sin carta para id', id); return; }
+  if (img.dataset.broken) return;
+  img.dataset.broken = '1';
+  img.src = spriteSrc(id, true);
+}
+
+function shakeCard(id) {
+  const card = document.querySelector(`.fighter-card[data-id="${id}"]`);
+  if (!card) { console.warn('[render] shakeCard: sin carta para id', id); return; }
+  card.classList.remove('hit');
+  void card.offsetWidth;            // fuerza reflow para re-disparar la animación
+  card.classList.add('hit');
+  setTimeout(() => card.classList.remove('hit'), 450);
 }
 
 // ── Matchup ────────────────────────────────────────────────────────
@@ -160,7 +208,7 @@ export function renderClose(state, onReplay) {
       <div class="title">FIN DEL TORNEO</div>
       <div class="panel">
         <div class="close-champ">🏆 ${champ ? champ.name : '—'}</div>
-        <div class="subtitle">${beatUatu ? 'Superó la prueba de Uatu' : 'Cayó ante Uatu, pero su gesta quedó escrita'}</div>
+        <div class="subtitle">${beatUatu ? 'Superó la prueba de Uatu' : 'Cayó ante Uatu, y el multiverso con él'}</div>
         <div class="record">Aciertos: ${won}/${total}</div>
         <div class="record coins">Saldo final: $UATU ${state.coins}</div>
       </div>

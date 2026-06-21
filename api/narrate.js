@@ -35,19 +35,34 @@ export default async function handler(req, res) {
   const motivo = clean(reason, 120) || 'la diferencia de poder fue decisiva';
   let prompt;
   if (isUatuFight) {
-    // En la prueba final el protagonista es SIEMPRE el campeón (el que no es Uatu),
-    // que la supera con sacrificio — reencuadre narrativo, no del motor (plan §G1).
+    // El protagonista es el campeón (el que no es Uatu). A diferencia del plan §G1
+    // original, la narración YA respeta el veredicto del motor: el campeón puede
+    // SUPERAR la prueba o CAER ante Uatu (con humor negro cósmico).
     const champ = (winner && winner.id === 'uatu') ? loser : winner;
     const cName = clean(champ.name), cPub = clean(champ.publisher, 20);
-    prompt =
-      `Eres el narrador de un juego estilo cartucho SNES, en español.\n` +
-      `${cName} (${cPub}) enfrenta la prueba final de Uatu el Observador.\n` +
-      `El campeón SUPERA la prueba con gran sacrificio. Uatu revela que buscaba al ser ` +
-      `capaz de salvar el multiverso de una colisión de universos.\n` +
-      `Narra en EXACTAMENTE 3 líneas CORTAS de caja de diálogo RPG (máx ~12 palabras ` +
-      `por línea, épicas, cero párrafos). Luego el sentido de la prueba en 1 frase y ` +
-      `la cicatriz cósmica del campeón en 1 frase.\n` +
-      `Responde SOLO JSON: {"lines":["..","..",".."],"loserFate":"..","winnerScar":".."}`;
+    const champWon = !(winner && winner.id === 'uatu');
+    if (champWon) {
+      prompt =
+        `Eres el narrador de un juego estilo cartucho SNES, en español.\n` +
+        `${cName} (${cPub}) enfrenta la prueba final de Uatu el Observador.\n` +
+        `El campeón SUPERA la prueba con gran sacrificio. Uatu revela que buscaba al ser ` +
+        `capaz de salvar el multiverso de una colisión de universos.\n` +
+        `Narra en EXACTAMENTE 3 líneas CORTAS de caja de diálogo RPG (máx ~12 palabras ` +
+        `por línea, épicas, cero párrafos). Luego el sentido de la prueba en 1 frase y ` +
+        `la cicatriz cósmica del campeón en 1 frase.\n` +
+        `Responde SOLO JSON: {"lines":["..","..",".."],"loserFate":"..","winnerScar":".."}`;
+    } else {
+      prompt =
+        `Eres el narrador de un juego estilo cartucho SNES, en español, con HUMOR NEGRO.\n` +
+        `${cName} (${cPub}) enfrenta la prueba final de Uatu el Observador... y FRACASA.\n` +
+        `Uatu lo juzga indigno; el campeón cae y el multiverso queda a merced de la ` +
+        `colisión de universos. Tono: épico-trágico con humor negro cósmico — la apatía ` +
+        `burocrática de un Observador que ya vio este final mil veces. Sin gore explícito.\n` +
+        `Narra en EXACTAMENTE 3 líneas CORTAS de caja de diálogo RPG (máx ~12 palabras ` +
+        `por línea, cero párrafos). Luego el destino del campeón caído en 1 frase y ` +
+        `el veredicto final de Uatu sobre el multiverso condenado en 1 frase.\n` +
+        `Responde SOLO JSON: {"lines":["..","..",".."],"loserFate":"..","winnerScar":".."}`;
+    }
   } else {
     prompt =
       `Eres el narrador de un juego de pelea estilo cartucho SNES, en español.\n` +

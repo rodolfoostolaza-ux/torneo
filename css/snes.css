@@ -77,6 +77,27 @@ input[type="text"], input[type="number"] {
 .fighter-card .odds { color: var(--accent); font-size: 14px; }
 .fighter-card .dmg { color: var(--lose); font-size: 9px; }
 
+/* ── Retrato pixel-art ── */
+.portrait-wrap {
+  width: 100%; aspect-ratio: 1 / 1; background: #0d1228;
+  border: 2px solid var(--ink); box-shadow: 2px 2px 0 #000; overflow: hidden;
+}
+.portrait {
+  display: block; width: 100%; height: 100%; object-fit: cover;
+  image-rendering: pixelated;          /* 64px -> tamaño carta sin emborronar */
+}
+
+/* Sacudida al recibir el golpe (se quita y re-aplica para re-disparar). */
+.fighter-card.hit { animation: shake 0.4s linear 1; }
+@keyframes shake {
+  0%, 100% { transform: translate(0, 0); }
+  15% { transform: translate(-4px, 1px); }
+  30% { transform: translate(4px, -1px); }
+  45% { transform: translate(-4px, 0); }
+  60% { transform: translate(4px, 1px); }
+  75% { transform: translate(-2px, -1px); }
+}
+
 /* ── Barras de stats ── */
 .stat { display: flex; align-items: center; gap: 6px; font-size: 8px; color: var(--dim); }
 .stat .label { width: 34px; }
