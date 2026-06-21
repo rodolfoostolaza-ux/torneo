@@ -5,13 +5,38 @@ import { currentMatch, placeBet, settle } from './state.js';
 import { renderMatchup, renderBetControls, renderBracket, renderHeader, showDialogue, hideDialogue, applyDamageVisual } from './render.js';
 import { BEATS, ARCHETYPES } from './config.js';
 
-async function api(path, body) {
-  const r = await fetch(path, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error(`${path} ${r.status}`);
-  return r.json();
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+// Cerebras free tier = 30 req/min (≈1 cada 2s). lastNarrateAt serializa las
+// llamadas a /api/narrate para no reventar ese límite (ver throttle en playMatch):
+// así la narración viene de la IA y no del fallback genérico.
+const NARRATE_GAP_MS = 2100;
+let lastNarrateAt = 0;
+
+// POST con reintento corto: un fallo transitorio de /api/resolve (red, cold start,
+// 5xx) NO debe congelar el torneo, y un 429/5xx de /api/narrate merece otra
+// oportunidad antes de caer al fallback. Los 4xx (403 CORS, 400) son
+// determinísticos: no se reintentan porque no van a cambiar.
+async function api(path, body, { retries = 2, backoff = 400 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    let r;
+    try {
+      r = await fetch(path, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      lastErr = e;                                    // error de red: reintentable
+      if (attempt < retries) { await sleep(backoff * (attempt + 1)); continue; }
+      throw lastErr;
+    }
+    if (r.ok) return r.json();
+    if (r.status < 500 && r.status !== 429) throw new Error(`${path} ${r.status}`);
+    lastErr = new Error(`${path} ${r.status}`);       // 5xx/429: reintentable
+    if (attempt < retries) await sleep(backoff * (attempt + 1));
+  }
+  throw lastErr;
 }
 
 const winnerOf = (result, f1, f2) => (result.winnerId === f1.id ? f1 : f2);
@@ -103,18 +128,30 @@ export async function playMatch(state, dialogue) {
   const winner = winnerOf(result, fighter1, fighter2);
   const loser  = loserOf(result, fighter1, fighter2);
   const reason = buildReason(fighter1, fighter2, result);
+
+  // Throttle anti-429: espacia las narraciones ≥2.1s para no reventar el límite de
+  // 30/min de Cerebras. Frena el juego un pelín solo si vas muy rápido; si ya
+  // tardaste leyendo, no añade espera. Garantiza narración de IA, no fallback.
+  const sinceLast = Date.now() - lastNarrateAt;
+  if (sinceLast < NARRATE_GAP_MS) await sleep(NARRATE_GAP_MS - sinceLast);
+
   let narr;
   try {
     narr = await api('/api/narrate', { winner, loser, reason, matchId, isUatuFight });
-  } catch {
+  } catch (e) {
+    console.warn('[narrate] Cerebras no disponible, uso narración local:', e.message);
     narr = fallbackNarration(result, fighter1, fighter2, isUatuFight);
   }
+  lastNarrateAt = Date.now();
   const lines = (narr.lines && narr.lines.length)
     ? narr.lines : fallbackNarration(result, fighter1, fighter2, isUatuFight).lines;
   const tail = [narr.loserFate, narr.winnerScar].filter(Boolean);
   showDialogue();
-  await dialogue.show([...lines, ...tail]);
-  hideDialogue();
+  try {
+    await dialogue.show([...lines, ...tail]);
+  } finally {
+    hideDialogue();   // pase lo que pase, no dejar el diálogo ni su listener colgado
+  }
 
   // 4b) golpe visual sobre las cartas aún en pantalla: el perdedor queda roto.
   await applyDamageVisual(result.winnerId, result.loserId, result.damageToWinner);

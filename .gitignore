@@ -8,6 +8,7 @@ node_modules/
 .openclaude-profile.json
 .playwright-mcp/
 snapshot_full.md
+_dev_server.mjs
 
 # Kit de generación de sprites (local) — los sprites finales (assets/fighters/*.png)
 # sí se versionan; esto es solo el generador y los dípticos crudos para re-procesar.

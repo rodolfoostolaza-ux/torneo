@@ -64,13 +64,18 @@ export default async function handler(req, res) {
         `Responde SOLO JSON: {"lines":["..","..",".."],"loserFate":"..","winnerScar":".."}`;
     }
   } else {
+    // El motor ya decidió que gana ${wName}; la narración NO debe spoilearlo en la
+    // primera línea. Construye tensión y corona al final (bug "dice quién gana").
     prompt =
-      `Eres el narrador de un juego de pelea estilo cartucho SNES, en español.\n` +
-      `${wName} (${wPub}) derrotó a ${lName} (${lPub}).\n` +
-      `Factor decisivo: ${motivo}.\n` +
-      `Narra el desenlace en EXACTAMENTE 3 líneas CORTAS de caja de diálogo RPG ` +
-      `(máx ~12 palabras por línea, punzantes, cero párrafos). Luego el destino del ` +
-      `perdedor en 1 frase y la cicatriz del ganador en 1 frase.\n` +
+      `Eres el narrador de un combate épico estilo cartucho SNES, en español.\n` +
+      `Duelo: ${wName} (${wPub}) contra ${lName} (${lPub}). El vencedor real es ` +
+      `${wName}, gracias a que ${motivo}. PROHIBIDO revelar quién gana antes de la 3ª línea.\n` +
+      `Narra con verbos potentes e imágenes vívidas, cero relleno, EXACTAMENTE 3 líneas ` +
+      `de caja RPG (máx ~11 palabras c/u):\n` +
+      `- Línea 1: el choque inicial, pura tensión, SIN ganador.\n` +
+      `- Línea 2: el momento que inclina la balanza.\n` +
+      `- Línea 3: el golpe final que corona a ${wName}.\n` +
+      `Luego el destino del perdedor en 1 frase y la cicatriz del ganador en 1 frase.\n` +
       `Responde SOLO JSON: {"lines":["..","..",".."],"loserFate":"..","winnerScar":".."}`;
   }
 

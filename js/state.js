@@ -54,10 +54,14 @@ export function currentMatch(state) {
     };
   }
   const m = state.bracket[state.round][state.matchIndex];
-  return {
-    fighter1: state.fighters[m.f1Id], fighter2: state.fighters[m.f2Id],
-    matchId: m.matchId, isUatuFight: false,
-  };
+  const fighter1 = state.fighters[m.f1Id], fighter2 = state.fighters[m.f2Id];
+  if (!fighter1 || !fighter2) {
+    // Defensa: si un winnerId de la ronda previa llegó null/desconocido, el match
+    // queda sin luchador y reventaría al renderizar (causa probable del freeze
+    // en semifinales). Falla con contexto claro en vez de explotar opaco.
+    throw new Error(`Combate ${m.matchId} mal formado: f1Id=${m.f1Id} f2Id=${m.f2Id}`);
+  }
+  return { fighter1, fighter2, matchId: m.matchId, isUatuFight: false };
 }
 
 // Registra la apuesta del combate actual. Apostar es obligatorio antes de

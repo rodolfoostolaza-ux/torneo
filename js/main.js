@@ -14,7 +14,16 @@ async function runTournament(alias) {
   const state = createTournament(alias, newSeed());
   const dialogue = new DialogueBox(document.getElementById('dialogue'));
   while (!isDone(state)) {
-    await playMatch(state, dialogue);
+    try {
+      await playMatch(state, dialogue);
+    } catch (e) {
+      // Un combate que truena (red caída, /api/resolve 5xx tras agotar reintentos)
+      // NO debe congelar el torneo en silencio. playMatch sólo avanza el bracket al
+      // final (settle); si revienta antes, el estado queda intacto y reintentamos
+      // el mismo combate. Evita el freeze mudo en semifinales.
+      console.error('[torneo] combate falló, reintento en 1.5s:', e.message);
+      await new Promise(res => setTimeout(res, 1500));
+    }
   }
   renderClose(state, () => runTournament(alias));
 }
