@@ -27,10 +27,23 @@ function fighterCopy(f) {
 }
 
 // Crea un torneo: elige 8 de cada bando (shuffle sembrado), arma los octavos
-// Marvel-vs-DC, inicializa coins y daño.
-export function createTournament(alias, torneoSeed) {
+// Marvel-vs-DC, inicializa coins y daño. Si pasas championId, ese luchador entra
+// GARANTIZADO al bracket (eliges entre los 24 pero siempre compites con tu elegido).
+export function createTournament(alias, torneoSeed, championId = null) {
   const marvel = seededShuffle(ROSTER.marvel, hash32(torneoSeed + ':marvel')).slice(0, 8);
   const dc     = seededShuffle(ROSTER.dc,     hash32(torneoSeed + ':dc')).slice(0, 8);
+
+  // Garantía del elegido (Task A): si el shuffle no lo dejó entre los 8 de su
+  // bando, lo metemos desplazando al último sembrado de ese lado. Sin esto, elegir
+  // de los 24 podría dejar fuera del bracket justo a tu campeón.
+  if (championId) {
+    const inMarvel = ROSTER.marvel.some(f => f.id === championId);
+    const seeded = inMarvel ? marvel : dc;
+    if (!seeded.some(f => f.id === championId)) {
+      const champ = (inMarvel ? ROSTER.marvel : ROSTER.dc).find(f => f.id === championId);
+      if (champ) seeded[seeded.length - 1] = champ;
+    }
+  }
 
   const fighters = {};
   const reg = f => { fighters[f.id] = fighterCopy(f); return f.id; };
@@ -47,7 +60,8 @@ export function createTournament(alias, torneoSeed) {
     bets: {}, history: [], phase: 'tournament', champion: null,
     // myChampion: el luchador con el que TE identificas (D2). champBonus: total
     // $UATU que te ha pagado por sobrevivir rondas (se muestra en el cierre).
-    myChampion: null, champBonus: 0,
+    // boostsUsed: impulsos comprados en el taller (encarece el siguiente, Task B).
+    myChampion: championId, champBonus: 0, boostsUsed: 0,
   };
 }
 
@@ -151,3 +165,37 @@ export function settle(state, result) {
 export function isUatuFight(state) { return state.phase === 'uatu'; }
 export function isDone(state) { return state.phase === 'done'; }
 export function champion(state) { return state.champion ? state.fighters[state.champion] : null; }
+
+// ── Taller del elegido (Task B): curar daño / impulsar stats, 100% client-side ──
+// El motor (lib/combat) lee stats y daño del fighter que le manda el cliente, y
+// playMatch toma esos objetos de state.fighters al resolver. Mutarlos aquí cambia
+// de verdad las odds y el resultado — sin tocar el servidor ni el motor.
+const BOOST_STEP = 5;   // +5 a la stat elegida por cada impulso (tope 100)
+
+// Costo del próximo impulso: 50 el primero, +25 por cada uno ya comprado.
+export function boostCost(state) { return 50 + 25 * (state.boostsUsed || 0); }
+
+// Impulsa una stat del elegido en +BOOST_STEP (tope 100). Cobra y cuenta el uso.
+// Devuelve true si se aplicó (había saldo y la stat no estaba al tope).
+export function boostStat(state, statKey) {
+  const mc = state.myChampion && state.fighters[state.myChampion];
+  if (!mc || !(statKey in mc.stats)) return false;
+  const cost = boostCost(state);
+  if (state.coins < cost || mc.stats[statKey] >= 100) return false;
+  mc.stats[statKey] = Math.min(100, mc.stats[statKey] + BOOST_STEP);
+  state.coins -= cost;
+  state.boostsUsed = (state.boostsUsed || 0) + 1;
+  return true;
+}
+
+// Cura daño del elegido: 1 $UATU por cada 1% de daño. Cura lo máximo que el saldo
+// permita (hasta dejarlo en 0). Devuelve los puntos de daño curados.
+export function healChampion(state) {
+  const mc = state.myChampion && state.fighters[state.myChampion];
+  if (!mc || !mc.damage) return 0;
+  const pts = Math.min(Math.round(mc.damage * 100), state.coins);
+  if (pts <= 0) return 0;
+  mc.damage = Math.max(0, mc.damage - pts / 100);
+  state.coins -= pts;
+  return pts;
+}

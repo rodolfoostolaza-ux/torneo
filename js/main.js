@@ -1,8 +1,8 @@
 // js/main.js — punto de entrada. Pide alias, crea el torneo y corre el loop de
 // combates hasta el cierre contra Uatu.
 import { DialogueBox } from './dialogue.js';
-import { renderAlias, renderEnding, renderFatal, renderIntro, renderStatsAttract, renderChampionSelect, renderRoundTransition } from './render.js';
-import { createTournament, isDone } from './state.js';
+import { renderAlias, renderEnding, renderFatal, renderIntro, renderStatsAttract, renderChampionSelect, renderRoundTransition, renderTaller, champAlive } from './render.js';
+import { createTournament, isDone, currentMatch } from './state.js';
 import { playMatch, resetNarrateThrottle } from './engine-client.js';
 import * as audio from './audio.js';
 
@@ -48,14 +48,16 @@ const MAX_FAILS = 5;   // tope de reintentos del MISMO combate antes de rendirse
 
 async function runTournament(alias) {
   audio.music('title');            // ambiente de menú para la selección (y reset en replay)
-  const state = createTournament(alias, newSeed());
-  state.myChampion = await renderChampionSelect(state);   // D2: eliges tu elegido
+  // Task A: eliges entre los 24 ANTES de armar el bracket; tu elegido entra garantizado.
+  const championId = await renderChampionSelect();
+  const state = createTournament(alias, newSeed(), championId);
   const dialogue = new DialogueBox(document.getElementById('dialogue'));
   resetNarrateThrottle();          // partida nueva: sin espera fantasma heredada
   let fails = 0;
   while (!isDone(state)) {
     try {
       await renderRoundTransition(state);   // pacing: cartel de ronda antes del combate
+      await maybeTaller(state);             // Task B: taller antes de la pelea de tu elegido
       await playMatch(state, dialogue);
       fails = 0;                   // avanzó: limpia el contador
     } catch (e) {
@@ -73,6 +75,18 @@ async function runTournament(alias) {
     }
   }
   await renderEnding(state, () => runTournament(alias));
+}
+
+// El taller (Task B) solo aparece antes del combate de TU elegido, si sigue vivo
+// y tienes $UATU que gastar (sin saldo no hay nada que hacer: lo saltamos para no
+// estorbar — p.ej. en la 1ª ronda, cuando arrancas con 0 monedas).
+async function maybeTaller(state) {
+  if (state.coins <= 0 || !champAlive(state)) return;
+  const cm = currentMatch(state);
+  if (!cm) return;
+  if (cm.fighter1.id === state.myChampion || cm.fighter2.id === state.myChampion) {
+    await renderTaller(state);
+  }
 }
 
 async function main() {

@@ -39,6 +39,19 @@ body {
   border: 4px solid var(--ink); outline: 4px solid var(--bg); outline-offset: 2px;
   box-shadow: 6px 6px 0 #000; min-height: 96px; position: relative;
 }
+/* Overlay fijo al fondo del viewport: el #dialogue es hermano DESPUÉS de #screen,
+   así que en flujo normal cae debajo del contenido (cartas+sprites+apuesta). En
+   móvil ese contenido es más alto que la pantalla y empujaba el diálogo BAJO el
+   pliegue, sin auto-scroll → el jugador nunca veía los diálogos pre/post pelea
+   (bug confirmado: top 698 con viewport 640). Fijarlo al fondo lo pone siempre a
+   la vista, que además es el patrón real de caja RPG. Solo se ve cuando se quita
+   .hidden; el flujo bloquea en el diálogo, así que no tapa controles en uso. */
+#dialogue.dialogue-box {
+  position: fixed; left: 0; right: 0; bottom: 8px;
+  width: auto; max-width: 728px; margin: 0 auto;
+  z-index: 40;            /* sobre el contenido, bajo el botón de mute (50) */
+  box-sizing: border-box;
+}
 .dialogue-box .advance {
   position: absolute; right: 10px; bottom: 6px; color: var(--accent);
   animation: blink 1s steps(2) infinite;
@@ -206,3 +219,10 @@ input[type="text"], input[type="number"] {
 }
 .audio-toggle:hover { background: var(--panel); }
 .audio-toggle:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #000; }
+
+/* ── Taller del elegido (Task B): curar / impulsar ── */
+.taller { gap: 12px; }
+.taller-stats { flex-wrap: wrap; gap: 8px; }
+.taller-stat { flex: 1 1 28%; min-width: 84px; text-align: center; }
+.taller-stat b { color: var(--accent); }
+.taller-stat:disabled { opacity: 0.45; cursor: default; }

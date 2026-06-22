@@ -2,6 +2,7 @@
 // No decide nada del juego: solo dibuja matchup, apuesta, bracket y cierre.
 import { ARCHETYPES, BEATS, ROSTER } from './config.js';
 import { DialogueBox } from './dialogue.js';
+import { boostCost, boostStat, healChampion } from './state.js';
 import * as audio from './audio.js';
 
 const el = id => document.getElementById(id);
@@ -121,10 +122,11 @@ export function renderAlias() {
   });
 }
 
-// ── Selección de campeón (D2) ──────────────────────────────────────
-// Antes del primer combate eliges UNO de los 16 que entran al bracket. Te
-// identificas con él: cada ronda que sobreviva te paga $UATU (settle), pero
-// igual apuestas en todas. Mini-cartas (sprite + arquetipo, sin stats) en grilla.
+// ── Selección de campeón (D2 / Task A) ─────────────────────────────
+// Antes de armar el bracket eliges UNO de los 24 del roster completo. Tu elegido
+// entra GARANTIZADO al bracket de 16 (createTournament lo siembra). Te identificas
+// con él: cada ronda que sobreviva te paga $UATU (settle), pero igual apuestas en
+// todas. Mini-cartas (sprite + arquetipo, sin stats) en grilla.
 function pickCard(f) {
   const a = arch(f.archetype);
   return `
@@ -137,20 +139,19 @@ function pickCard(f) {
     </button>`;
 }
 
-export function renderChampionSelect(state) {
+export function renderChampionSelect() {
   return new Promise(resolve => {
     el('hud').innerHTML = '';
-    const all = Object.values(state.fighters);
-    const marvel = all.filter(f => f.publisher === 'Marvel');
-    const dc = all.filter(f => f.publisher !== 'Marvel');
+    const byId = {};
+    [...ROSTER.marvel, ...ROSTER.dc].forEach(f => { byId[f.id] = f; });
     el('screen').innerHTML = `
       <div class="screen champ-select">
         <div class="title center">ELIGE A TU CAMPEÓN</div>
-        <div class="subtitle center">Uno de los 16. Cada ronda que sobreviva te paga $UATU — pero igual apuestas en TODAS las peleas.</div>
+        <div class="subtitle center">Uno de los 24 — tu elegido SIEMPRE entra al bracket de 16. Cada ronda que sobreviva te paga $UATU; igual apuestas en TODAS las peleas.</div>
         <div class="subtitle marvel-ink">MARVEL</div>
-        <div class="pick-grid">${marvel.map(pickCard).join('')}</div>
+        <div class="pick-grid">${ROSTER.marvel.map(pickCard).join('')}</div>
         <div class="subtitle dc-ink">DC</div>
-        <div class="pick-grid">${dc.map(pickCard).join('')}</div>
+        <div class="pick-grid">${ROSTER.dc.map(pickCard).join('')}</div>
         <button id="champ-go" class="btn accent full" disabled>ELIGE UNO ↑</button>
       </div>`;
     let pickId = null;
@@ -160,10 +161,51 @@ export function renderChampionSelect(state) {
       pickId = c.dataset.id;
       cards.forEach(x => x.classList.toggle('sel', x === c));
       go.disabled = false;
-      go.textContent = `CONFIRMAR: ${state.fighters[pickId].name.toUpperCase()}`;
+      go.textContent = `CONFIRMAR: ${byId[pickId].name.toUpperCase()}`;
     }));
     // once: el confirmar cierra la pantalla; sin él un doble-toque resolvería dos veces.
     go.addEventListener('click', () => { if (pickId) resolve(pickId); }, { once: true });
+  });
+}
+
+// ── Taller del elegido (Task B) ────────────────────────────────────
+// Pantalla saltable que aparece SOLO antes del combate de tu elegido (si vive y
+// tienes saldo; el gating vive en main.js). Curar daño (1 $UATU por 1%) o impulsar
+// una stat (+5, costo creciente). Todo client-side: muta state.fighters[myChampion]
+// vía los helpers de state.js y re-renderiza tras cada acción. Resuelve al CONTINUAR.
+export function renderTaller(state) {
+  return new Promise(resolve => {
+    const mc = state.fighters[state.myChampion];
+    const draw = () => {
+      const dmgPct = Math.round(mc.damage * 100);
+      const healPts = Math.min(dmgPct, state.coins);     // lo que el saldo permite curar
+      const bcost = boostCost(state);
+      const canBoost = state.coins >= bcost;
+      const statRow = Object.keys(STAT_LABELS).map(k => {
+        const dis = (!canBoost || mc.stats[k] >= 100) ? 'disabled' : '';
+        return `<button class="btn taller-stat" data-stat="${k}" ${dis}>${STAT_LABELS[k]} <b>${mc.stats[k]}</b></button>`;
+      }).join('');
+      el('hud').innerHTML = '';
+      el('screen').innerHTML = `
+        <div class="screen taller">
+          <div class="title center">⚒ EL TALLER ⚒</div>
+          <div class="subtitle center">Antes de que ${esc(mc.name)} pise la arena. Invierte tu $UATU o sigue de largo.</div>
+          <div class="row between panel">
+            <span class="subtitle">★ ${esc(mc.name)}</span>
+            <span class="subtitle">daño ${dmgPct}%</span>
+            <span class="coins">$UATU ${state.coins}</span>
+          </div>
+          <button id="taller-heal" class="btn full" ${healPts > 0 ? '' : 'disabled'}>CURAR ${healPts}% · ${healPts} $UATU</button>
+          <div class="subtitle">IMPULSAR +5 a una stat — próximo impulso: ${bcost} $UATU${canBoost ? '' : ' (sin saldo)'}</div>
+          <div class="row taller-stats">${statRow}</div>
+          <button id="taller-go" class="btn accent full">CONTINUAR A LA PELEA →</button>
+        </div>`;
+      el('taller-heal').addEventListener('click', () => { if (healChampion(state) > 0) draw(); });
+      [...document.querySelectorAll('.taller-stat')].forEach(b =>
+        b.addEventListener('click', () => { if (boostStat(state, b.dataset.stat)) draw(); }));
+      el('taller-go').addEventListener('click', () => resolve(), { once: true });
+    };
+    draw();
   });
 }
 
