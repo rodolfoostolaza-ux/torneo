@@ -45,50 +45,68 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(500).json({ error: 'CEREBRAS_API_KEY not configured' });
 
   const motivo = clean(reason, 120) || 'la diferencia de poder fue decisiva';
+  // Guardia de canon ADAPTATIVA: la IA puede teñir el diálogo con la historia real
+  // de los personajes SI existe, pero tiene prohibido inventar hechos como si fueran
+  // canon. Misma instrucción en los 3 prompts (combate normal + las dos ramas de Uatu).
+  const CANON = `CANON: si los personajes comparten historia real en los cómics, deja que el ` +
+    `diálogo lo refleje con sutileza; si NO, sé fiel a sus personalidades. NUNCA inventes ` +
+    `hechos ni cites eventos que no ocurrieron.\n`;
+  // Contrato JSON nuevo (Convergencia v2): además de la narración, los personajes HABLAN.
+  // winnerLine/loserLine = la frase que dice cada uno, en su voz, SIN su nombre (el
+  // cliente la formatea). Sustituye al viejo loserFate/winnerScar (la "cicatriz cósmica":
+  // el daño real del ganador ahora lo pone el cliente desde el número del motor).
+  const JSON_SHAPE = `Responde SOLO JSON: {"lines":["..","..",".."],"winnerLine":"..","loserLine":".."}`;
+
   let prompt;
   if (isUatuFight) {
-    // El protagonista es el campeón (el que no es Uatu). A diferencia del plan §G1
-    // original, la narración YA respeta el veredicto del motor: el campeón puede
-    // SUPERAR la prueba o CAER ante Uatu (con humor negro cósmico).
+    // El protagonista es el campeón (el que no es Uatu). La narración YA respeta el
+    // veredicto del motor: el campeón puede SUPERAR la prueba o CAER ante Uatu.
     const champ = (winner && winner.id === 'uatu') ? loser : winner;
     const cName = clean(champ.name), cPub = clean(champ.publisher, 20);
     const champWon = !(winner && winner.id === 'uatu');
     if (champWon) {
       prompt =
-        `Eres el narrador de un juego estilo cartucho SNES, en español.\n` +
-        `${cName} (${cPub}) enfrenta la prueba final de Uatu el Observador.\n` +
-        `El campeón SUPERA la prueba con gran sacrificio. Uatu revela que buscaba al ser ` +
-        `capaz de salvar el multiverso de una colisión de universos.\n` +
-        `Narra en EXACTAMENTE 3 líneas CORTAS de caja de diálogo RPG (máx ~12 palabras ` +
-        `por línea, épicas, cero párrafos). Luego el sentido de la prueba en 1 frase y ` +
-        `la cicatriz cósmica del campeón en 1 frase.\n` +
-        `Responde SOLO JSON: {"lines":["..","..",".."],"loserFate":"..","winnerScar":".."}`;
+        `Eres el narrador de un juego estilo cartucho SNES, en español, y das voz a los personajes.\n` +
+        `${cName} (${cPub}) enfrenta la prueba final de Uatu el Observador, y la SUPERA con gran ` +
+        `sacrificio. Uatu buscaba al ser capaz de salvar el multiverso de una colisión de universos.\n` +
+        CANON +
+        `Devuelve:\n` +
+        `- "lines": EXACTAMENTE 3 líneas de caja RPG (máx ~12 palabras c/u, épicas), sin revelar el ` +
+        `desenlace hasta la 3ª.\n` +
+        `- "winnerLine": lo que GRITA ${cName} al superar la prueba, en su voz (1 frase, SIN su nombre).\n` +
+        `- "loserLine": lo que concede Uatu al inclinarse ante el digno (1 frase, SIN nombre).\n` +
+        JSON_SHAPE;
     } else {
       prompt =
-        `Eres el narrador de un juego estilo cartucho SNES, en español, con HUMOR NEGRO.\n` +
-        `${cName} (${cPub}) enfrenta la prueba final de Uatu el Observador... y FRACASA.\n` +
-        `Uatu lo juzga indigno; el campeón cae y el multiverso queda a merced de la ` +
-        `colisión de universos. Tono: épico-trágico con humor negro cósmico — la apatía ` +
-        `burocrática de un Observador que ya vio este final mil veces. Sin gore explícito.\n` +
-        `Narra en EXACTAMENTE 3 líneas CORTAS de caja de diálogo RPG (máx ~12 palabras ` +
-        `por línea, cero párrafos). Luego el destino del campeón caído en 1 frase y ` +
-        `el veredicto final de Uatu sobre el multiverso condenado en 1 frase.\n` +
-        `Responde SOLO JSON: {"lines":["..","..",".."],"loserFate":"..","winnerScar":".."}`;
+        `Eres el narrador de un juego estilo cartucho SNES, en español, con HUMOR NEGRO, y das voz a ` +
+        `los personajes.\n` +
+        `${cName} (${cPub}) enfrenta la prueba final de Uatu el Observador... y FRACASA. Uatu lo juzga ` +
+        `indigno; el campeón cae y el multiverso queda a merced de la colisión de universos. Tono: ` +
+        `épico-trágico con la apatía burocrática de un Observador que ya vio este final mil veces. ` +
+        `Sin gore explícito.\n` +
+        CANON +
+        `Devuelve:\n` +
+        `- "lines": EXACTAMENTE 3 líneas de caja RPG (máx ~12 palabras c/u), sin revelar el desenlace ` +
+        `hasta la 3ª.\n` +
+        `- "winnerLine": el veredicto frío de Uatu sobre el multiverso condenado (1 frase, SIN nombre).\n` +
+        `- "loserLine": las últimas palabras de ${cName} al caer, en su voz (1 frase, SIN su nombre).\n` +
+        JSON_SHAPE;
     }
   } else {
-    // El motor ya decidió que gana ${wName}; la narración NO debe spoilearlo en la
-    // primera línea. Construye tensión y corona al final (bug "dice quién gana").
+    // El motor ya decidió que gana ${wName}; la narración NO debe spoilearlo antes de
+    // la 3ª línea. Construye tensión, corona al final, y deja que ambos HABLEN.
     prompt =
-      `Eres el narrador de un combate épico estilo cartucho SNES, en español.\n` +
-      `Duelo: ${wName} (${wPub}) contra ${lName} (${lPub}). El vencedor real es ` +
-      `${wName}, gracias a que ${motivo}. PROHIBIDO revelar quién gana antes de la 3ª línea.\n` +
-      `Narra con verbos potentes e imágenes vívidas, cero relleno, EXACTAMENTE 3 líneas ` +
-      `de caja RPG (máx ~11 palabras c/u):\n` +
-      `- Línea 1: el choque inicial, pura tensión, SIN ganador.\n` +
-      `- Línea 2: el momento que inclina la balanza.\n` +
-      `- Línea 3: el golpe final que corona a ${wName}.\n` +
-      `Luego el destino del perdedor en 1 frase y la cicatriz del ganador en 1 frase.\n` +
-      `Responde SOLO JSON: {"lines":["..","..",".."],"loserFate":"..","winnerScar":".."}`;
+      `Eres el narrador de un combate épico estilo cartucho SNES, en español, y das voz a los personajes.\n` +
+      `Duelo: ${wName} (${wPub}) contra ${lName} (${lPub}). El vencedor real es ${wName}, gracias a que ` +
+      `${motivo}. PROHIBIDO revelar quién gana antes de la 3ª línea.\n` +
+      CANON +
+      `Devuelve:\n` +
+      `- "lines": EXACTAMENTE 3 líneas de caja RPG con verbos potentes (máx ~11 palabras c/u): L1 el ` +
+      `choque inicial, pura tensión, SIN ganador; L2 el momento que inclina la balanza; L3 el golpe ` +
+      `final que corona a ${wName}.\n` +
+      `- "winnerLine": lo que DICE ${wName} al ganar, en su propia voz (1 frase corta, SIN su nombre).\n` +
+      `- "loserLine": lo que DICE ${lName} al caer, en su propia voz (1 frase corta, SIN su nombre).\n` +
+      JSON_SHAPE;
   }
 
   // Timeout duro: si Cerebras no responde en 15s, abortamos. El cliente tiene su
@@ -136,7 +154,7 @@ export default async function handler(req, res) {
   }
 }
 
-// Extrae {lines, loserFate, winnerScar} del content. Intenta JSON; si no parsea,
+// Extrae {lines, winnerLine, loserLine} del content. Intenta JSON; si no parsea,
 // parte el texto en líneas cortas como respaldo.
 function parseNarration(text) {
   const m = text.match(/\{[\s\S]*\}/);
@@ -147,16 +165,16 @@ function parseNarration(text) {
       if (lines.length) {
         return {
           lines,
-          loserFate: o.loserFate || '',
-          winnerScar: o.winnerScar || '',
+          winnerLine: o.winnerLine || '',
+          loserLine: o.loserLine || '',
         };
       }
     } catch { /* cae al respaldo de abajo */ }
   }
-  const parts = text.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 5);
-  return {
-    lines: parts.slice(0, 3),
-    loserFate: parts[3] || '',
-    winnerScar: parts[4] || '',
-  };
+  // Sin JSON parseable no sabemos QUIÉN dice qué: adivinar la cita por posición
+  // cruzaría la atribución (frase del ganador puesta en boca del perdedor). Rescatamos
+  // solo las líneas de narración (que no tienen dueño) y dejamos winnerLine/loserLine
+  // vacíos: el cliente cae a su fallbackNarration local, que SÍ atribuye bien.
+  const parts = text.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 3);
+  return { lines: parts, winnerLine: '', loserLine: '' };
 }

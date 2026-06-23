@@ -1,7 +1,7 @@
 // js/main.js — punto de entrada. Pide alias, crea el torneo y corre el loop de
 // combates hasta el cierre contra Uatu.
 import { DialogueBox } from './dialogue.js';
-import { renderAlias, renderEnding, renderFatal, renderIntro, renderStatsAttract, renderChampionSelect, renderRoundTransition, renderTaller, champAlive } from './render.js';
+import { renderAlias, renderEnding, renderFatal, renderIntro, renderStatsAttract, renderChampionSelect, renderRoundTransition, renderTaller, renderUatuInterlude, champAlive } from './render.js';
 import { createTournament, isDone, currentMatch } from './state.js';
 import { playMatch, resetNarrateThrottle } from './engine-client.js';
 import * as audio from './audio.js';
@@ -56,6 +56,7 @@ async function runTournament(alias) {
   let fails = 0;
   while (!isDone(state)) {
     try {
+      await maybeUatuInterlude(state);      // narrativa entre rondas (antes del cartel)
       await renderRoundTransition(state);   // pacing: cartel de ronda antes del combate
       await maybeTaller(state);             // Task B: taller antes de la pelea de tu elegido
       await playMatch(state, dialogue);
@@ -75,6 +76,16 @@ async function runTournament(alias) {
     }
   }
   await renderEnding(state, () => runTournament(alias));
+}
+
+// Interludio de Uatu al arrancar cada ronda nueva (no la primera): narrativa entre
+// rondas, como Convergencia v1. Idempotente: si el 1er combate de la ronda se
+// reintenta tras un fallo, no repite el interludio (guarda _interludeRound).
+async function maybeUatuInterlude(state) {
+  if (state.phase !== 'tournament' || state.matchIndex !== 0 || state.round <= 0) return;
+  if (state._interludeRound === state.round) return;
+  state._interludeRound = state.round;
+  await renderUatuInterlude(state);
 }
 
 // El taller (Task B) solo aparece antes del combate de TU elegido, si sigue vivo

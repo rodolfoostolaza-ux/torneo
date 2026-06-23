@@ -245,6 +245,61 @@ export function renderRoundTransition(state) {
   });
 }
 
+// ── Interludio de Uatu entre rondas (historia, como Convergencia v1) ────
+// Antes de cada ronda nueva (no la primera), el Observador medita en voz alta:
+// da continuidad narrativa al bracket en vez de saltar seco de ronda a ronda.
+// Voz de Uatu (1ª persona, frío y cósmico). Clave = la ronda que ARRANCA.
+const UATU_ROUND_INTRO = {
+  1: [
+    'Los débiles ya cayeron del puente. Quedan ocho.',
+    'Ninguno sabe aún que solo busco a UNO capaz de mirarme de frente.',
+  ],
+  2: [
+    'Cuatro. El puente se estrecha y la sangre pesa más que antes.',
+    'Empiezo a distinguir una silueta digna de mi pregunta. ¿Serás tú?',
+  ],
+  3: [
+    'Dos quedan. Mi duda de eones está a un combate de respuesta.',
+    'Que suban. Después de esto, bajaré yo mismo a la arena.',
+  ],
+};
+const UATU_VOICE = line => `Uatu: «${line}»`;
+
+// Aparte sobre el elegido del jugador: el Observador también lo vigila. Refleja
+// su estado real (en pie / magullado / caído) leído del motor, sin inventar.
+function champAsideForInterlude(state) {
+  if (!state.myChampion) return '';
+  const mc = state.fighters[state.myChampion];
+  if (!mc) return '';                    // defensa: id de elegido sin registrar en fighters
+  if (champAlive(state)) {
+    const hurt = mc.damage >= DMG_ROTO ? ', magullado pero de pie' : '';
+    return UATU_VOICE(`Tu elegido, ${mc.name}, sigue cruzando${hurt}. A ti también te observo.`);
+  }
+  return UATU_VOICE('Tu elegido ya cayó. Sigues apostando sobre los restos de otros. Humano.');
+}
+
+// Interludio narrativo entre rondas. main.js lo dispara una vez por ronda nueva
+// (idempotente desde el loop); sin guion para esta ronda, no interrumpe.
+export async function renderUatuInterlude(state) {
+  const base = UATU_ROUND_INTRO[state.round];
+  if (!base) return;
+  audio.music('uatu');
+  el('hud').innerHTML = '';
+  el('screen').innerHTML = `
+    <div class="screen center transition">
+      <div class="intro-emblem">⊙</div>
+      <div class="title transition-title">EL OBSERVADOR MEDITA</div>
+      <div class="subtitle dim">— rumbo a ${SHORT_ROUNDS[state.round] || `RONDA ${state.round + 1}`} —</div>
+    </div>`;
+  const lines = base.map(UATU_VOICE);
+  const aside = champAsideForInterlude(state);
+  if (aside) lines.push(aside);
+  const box = new DialogueBox(el('dialogue'), { speed: 30, autoMs: 5000 });
+  showDialogue();
+  await box.show(lines);
+  hideDialogue();
+}
+
 // ── HUD persistente (alias, saldo, ronda) ──────────────────────────
 // ¿Tu elegido sigue en pie? Cayó si alguna vez fue el perdedor de un combate.
 export function champAlive(state) {
@@ -479,18 +534,59 @@ export function renderFatal(message) {
   el('reload').addEventListener('click', () => location.reload());
 }
 
+// ── Epílogo narrativo (Convergencia v2) ────────────────────────────
+// Beat de cierre RICO antes de los créditos / game over: Uatu pone palabras al
+// veredicto del motor y cierra el arco del torneo y el de TU apuesta. Sustituye
+// la "frase final pobre". Bifurca por beatUatu (mismo veredicto que el cierre).
+function epilogueLines(state, champ, beatUatu) {
+  const name = champ ? champ.name : 'el último en pie';
+  const mc = state.myChampion ? state.fighters[state.myChampion] : null;
+  const mineWon = !!(mc && champ && mc.id === champ.id);
+  if (beatUatu) {
+    return [
+      UATU_VOICE(`Lo lograste, ${name}. Tras eones observando, hallé al ser que me hace dudar.`),
+      UATU_VOICE('El multiverso no colapsa hoy. Marvel y DC vuelven a separarse. Mi juramento, roto sin culpa.'),
+      mineWon
+        ? `Apostaste por ${name} desde el puente, y ${name} cruzó entero. Buen ojo, ${esc(state.alias)}.`
+        : `${name} se lleva la gloria; tú, lo que el Observador respeta: la apuesta fría, ${esc(state.alias)}.`,
+    ];
+  }
+  return [
+    UATU_VOICE(`${name} no bastó. Lo vi venir desde antes de que cruzara el puente.`),
+    UATU_VOICE('Dos universos se desangran en uno. Y yo ya busco el siguiente que prometa más.'),
+    `Se apagan las luces sobre la arena, ${esc(state.alias)}. Otro torneo a la basura cósmica.`,
+  ];
+}
+
+export async function renderEpilogue(state, champ, beatUatu) {
+  audio.music(beatUatu ? 'title' : 'uatu');
+  el('hud').innerHTML = '';
+  el('screen').innerHTML = `
+    <div class="screen center transition">
+      <div class="intro-emblem">⊙</div>
+      <div class="title transition-title">${beatUatu ? 'EL VEREDICTO' : 'EL OCASO'}</div>
+    </div>`;
+  const box = new DialogueBox(el('dialogue'), { speed: 30, autoMs: 5200 });
+  showDialogue();
+  await box.show(epilogueLines(state, champ, beatUatu));
+  hideDialogue();
+}
+
 // ── Cierre épico (Lote 2) ──────────────────────────────────────────
 // Bifurca el final según el veredicto del motor (el cliente NO decide: lee
 // history.at(-1) con phase 'done'). Victoria → créditos arcade que duplican
 // $UATU → pantalla de campeón. Derrota → game over con humor negro.
 export async function renderEnding(state, onReplay) {
   el('hud').innerHTML = '';
-  hideDialogue();
   const champ = state.fighters[state.champion];
   const won = state.history.filter(h => h.bet && h.bet.won).length;
   const total = state.history.filter(h => h.bet).length;
   // Ancla a phase 'done' (settle ya corrió la pelea de Uatu): blinda el at(-1).
   const beatUatu = state.phase === 'done' && state.history.at(-1)?.winnerId === state.champion;
+
+  // Epílogo narrativo rico ANTES del cierre (cura la "frase final pobre").
+  await renderEpilogue(state, champ, beatUatu);
+  hideDialogue();
 
   if (beatUatu) {
     await rollCredits(state, champ);

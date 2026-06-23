@@ -72,7 +72,8 @@ function buildReason(f1, f2, result) {
 }
 
 // Narración de respaldo (cosmética) si Cerebras falla o tarda. El motor ya tiene
-// la verdad; esto solo arma líneas cortas legibles.
+// la verdad; esto solo arma líneas cortas legibles + diálogo crudo del ganador y
+// perdedor (winnerLine/loserLine, SIN nombre: el cliente los formatea igual que la IA).
 function fallbackNarration(result, f1, f2, isUatu) {
   const winner = winnerOf(result, f1, f2);
   const loser  = loserOf(result, f1, f2);
@@ -82,57 +83,81 @@ function fallbackNarration(result, f1, f2, isUatu) {
     if (champWon) {
       return {
         lines: [
-          `Uatu pone a prueba a ${champ.name}.`,
-          `${buildReason(f1, f2, result)}.`,
-          `El multiverso contiene el aliento.`,
+          `${champ.name} encara la prueba final del Observador.`,
+          `El multiverso entero contiene el aliento.`,
+          `Contra todo pronóstico, ${champ.name} sigue en pie.`,
         ],
-        loserFate: `Uatu se inclina: la prueba ha sido superada.`,
-        winnerScar: `${champ.name} arde con cicatrices cósmicas.`,
+        winnerLine: `El multiverso no cae hoy.`,             // lo dice el campeón (winner)
+        loserLine: `Te has mostrado digno. Pocos lo logran.`, // lo concede Uatu (loser)
       };
     }
     return {
       lines: [
-        `Uatu pone a prueba a ${champ.name}.`,
-        `${champ.name} no da el ancho.`,
-        `Uatu suspira: otro multiverso a la basura.`,
+        `${champ.name} encara la prueba final del Observador.`,
+        `Uatu lo halla falto.`,
+        `${champ.name} se apaga ante la mirada cósmica.`,
       ],
-      loserFate: `${champ.name} cae; el Observador ni se inmuta.`,
-      winnerScar: `El multiverso colapsa. Uatu ya busca al siguiente.`,
+      winnerLine: `Otro multiverso a la basura. Siguiente.`,  // lo dice Uatu (winner)
+      loserLine: `No... alcancé...`,                          // lo dice el campeón (loser)
     };
   }
   return {
     lines: [
-      `${winner.name} se impone sobre ${loser.name}.`,
+      `${winner.name} y ${loser.name} chocan sin tregua.`,
       `${buildReason(f1, f2, result)}.`,
-      `El público enmudece.`,
+      `${winner.name} se impone.`,
     ],
-    loserFate: `${loser.name} cae derrotado.`,
-    winnerScar: `${winner.name} sigue en pie, marcado por el duelo.`,
+    winnerLine: `Buena pelea. Pero el que queda en pie soy yo.`,
+    loserLine: `Esto... no se queda así.`,
   };
 }
 
-const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+// Formatea una cita en caja RPG: «lo que dice» atribuido al personaje. Mismo formato
+// para el careo local y para el diálogo post de la IA (que viene crudo, sin nombre).
+const formatDialogue = (f, line) => `${f.name}: «${line}»`;
 
-// Presentación PRE-combate, local (sin API: no gasta el cupo de Cerebras). Da
-// contexto y marca a tu elegido SIN spoilear — solo nombres y arquetipos como
-// color. La plantilla varía de forma determinista (mismo combate → misma frase).
-function preMatchLines(f1, f2, isUatu, myChampion) {
+// Bravatas de careo por arquetipo (1ª persona). El careo PRE-combate es local (sin
+// API: no gasta el cupo de Cerebras) y determinista: mismo combate → mismo careo.
+const TAUNTS = {
+  fuerza:    ['Te voy a partir en dos.', 'Aquí se acaba tu suerte.', 'No hay nada que aguante esto.'],
+  velocista: ['Ni me vas a ver venir.', 'Para cuando reacciones, ya gané.', 'Demasiado lento para mí.'],
+  tecnologo: ['Ya calculé tu derrota.', 'Tengo respuesta para todo lo que hagas.', 'La cabeza gana esto, no los puños.'],
+  mistico:   ['El destino ya te condenó.', 'Fuerzas que no entiendes te van a tragar.', 'Tu final ya está escrito.'],
+  peleador:  ['He vencido cosas peores que tú.', 'Pura técnica contra tu desorden.', 'Lo único que sé hacer es ganar.'],
+};
+
+// Careo PRE-combate (DIÁLOGO entre los dos personajes, no narración descriptiva).
+// Cada uno suelta una bravata en su voz según su arquetipo, elegida de forma
+// determinista. Garantiza "diálogo entre personajes antes de la pelea" aunque la
+// IA del post falle, sin gastar cupo de Cerebras.
+function preMatchLines(f1, f2, isUatu) {
   if (isUatu) {
     return [
-      `${f1.name} ha cruzado el puente entero.`,
-      `Al otro lado aguarda Uatu. Aquí no hay favorito seguro.`,
+      formatDialogue(f1, 'He cruzado el puente entero. No me detengo aquí.'),
+      `Uatu el Observador no responde. La prueba final comienza.`,
     ];
   }
-  const tag = id => (id === myChampion ? ' (tu elegido)' : '');
-  const a1 = ARCHETYPES[f1.archetype].label.toLowerCase();
-  const a2 = ARCHETYPES[f2.archetype].label.toLowerCase();
-  const openers = [
-    `${f1.name}${tag(f1.id)} encara a ${f2.name}${tag(f2.id)}.`,
-    `${f1.name}${tag(f1.id)} y ${f2.name}${tag(f2.id)} pisan la arena.`,
-    `Frente a frente: ${f1.name}${tag(f1.id)} contra ${f2.name}${tag(f2.id)}.`,
+  const pick = (f, salt) => {
+    const arr = TAUNTS[f.archetype] || TAUNTS.peleador;
+    const h = (f.id + salt).split('').reduce((s, c) => s + c.charCodeAt(0), 0);
+    return arr[h % arr.length];
+  };
+  return [
+    formatDialogue(f1, pick(f1, f2.id)),
+    formatDialogue(f2, pick(f2, f1.id)),
   ];
-  const h = (f1.id + f2.id).split('').reduce((s, c) => s + c.charCodeAt(0), 0);
-  return [openers[h % openers.length], `${cap(a1)} contra ${a2}. El puente cruje.`];
+}
+
+// Línea de DAÑO REAL del motor: result.damageToWinner es el daño total que el ganador
+// arrastra (state.fighters[winnerId].damage), y a ≥0.5 su retrato se rompe (DMG_ROTO).
+// Esta línea hace VISIBLE ese costo en texto — sustituye la vieja "cicatriz cósmica"
+// inventada por el número que el motor ya calculó. Vacía si no hubo daño.
+function damageLine(winner, dmg) {
+  const d = dmg || 0;
+  if (d >= 0.5)  return `${winner.name} avanza malherido: cargará ese daño a la próxima ronda.`;
+  if (d >= 0.25) return `${winner.name} sale tocado del combate.`;
+  if (d > 0)     return `${winner.name} sale casi intacto.`;
+  return '';
 }
 
 export async function playMatch(state, dialogue) {
@@ -154,7 +179,7 @@ export async function playMatch(state, dialogue) {
   if (!existingBet) {
     try {
       showDialogue();
-      await dialogue.show(preMatchLines(fighter1, fighter2, isUatuFight, state.myChampion));
+      await dialogue.show(preMatchLines(fighter1, fighter2, isUatuFight));
     } finally {
       hideDialogue();
     }
@@ -189,18 +214,29 @@ export async function playMatch(state, dialogue) {
     narr = fallbackNarration(result, fighter1, fighter2, isUatuFight);
   }
   lastNarrateAt = Date.now();
-  const lines = (narr.lines && narr.lines.length)
-    ? narr.lines : fallbackNarration(result, fighter1, fighter2, isUatuFight).lines;
-  const tail = [narr.loserFate, narr.winnerScar].filter(Boolean);
+  const fb = fallbackNarration(result, fighter1, fighter2, isUatuFight);
+  const lines = (narr.lines && narr.lines.length) ? narr.lines : fb.lines;
+  const winnerLine = narr.winnerLine || fb.winnerLine;
+  const loserLine  = narr.loserLine  || fb.loserLine;
+
+  // CONSECUENCIAS = beat post-golpe: el perdedor reacciona en su voz, el ganador
+  // remata, y (solo en combate normal) la línea de DAÑO REAL del motor hace visible
+  // el costo que el ganador arrastra. En la prueba de Uatu no reincide nadie: el
+  // epílogo cierra esa historia, no una línea de daño que iría a una ronda inexistente.
+  const post = [
+    formatDialogue(loser, loserLine),
+    formatDialogue(winner, winnerLine),
+    isUatuFight ? '' : damageLine(winner, result.damageToWinner),
+  ].filter(Boolean);
 
   // DESARROLLO → golpe visual → CONSECUENCIAS. El golpe parte la narración: la
   // pelea revela al ganador, las cartas se sacuden y el perdedor queda roto, y
-  // recién entonces caen las consecuencias como beat post-combate aparte.
+  // recién entonces caen las consecuencias (diálogo + daño) como beat aparte.
   try {
     showDialogue();
     await dialogue.show(lines);
     await applyDamageVisual(result.winnerId, result.loserId, result.damageToWinner);
-    if (tail.length) await dialogue.show(tail);
+    if (post.length) await dialogue.show(post);
   } finally {
     hideDialogue();   // pase lo que pase, no dejar el diálogo ni su listener colgado
   }
